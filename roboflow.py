@@ -24,7 +24,7 @@ CONFIG = {
     "system_id":          "SPEED-VIGIL-001",
     "destination_email":  "david.m1901456@st.futminna.edu.ng",
     "model_id":           "toy-car-detection-uqfuq",
-    "version":            "1",
+    "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC"
 }
 
