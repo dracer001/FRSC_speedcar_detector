@@ -583,7 +583,13 @@ def upload_and_infer():
     total_ms = (datetime.now() - t_start).total_seconds() * 1000
     print(f"[RESPONSE] Returning to ESP32  total={total_ms:.0f}ms")
     print(f"{'='*60}\n")
-    return jsonify(rf_data)
+    # CHANGE THIS LINE to return the calculated flags to your ESP32-CAM
+    return jsonify({
+        "car_detected": car_detected,
+        "is_violation": is_violation,
+        "predictions": predictions,
+        "roboflow_raw": rf_data
+    })
 
 
 # ─── RUN ─────────────────────────────────────────────────────
