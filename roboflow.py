@@ -5,6 +5,7 @@ import smtplib
 import base64
 import json
 import threading
+import time
 import cloudinary
 import cloudinary.uploader
 from datetime import datetime
@@ -446,7 +447,43 @@ def background_save(img_bytes, public_id, record, car_detected, predictions):
         )
 
 
-# ─── MAIN INFERENCE ENDPOINT ─────────────────────────────────
+# ─── HEALTH CHECK ─────────────────────────────────────────────
+# Lightweight liveness probe — no image processing, no DB, no
+# external calls. The ESP32 (or any monitor) hits this to confirm
+# the server process is up and responding, fast, every time.
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        "status":     "ok",
+        "system_id":  CONFIG["system_id"],
+        "agency":     CONFIG["agency_name"],
+        "time":       datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }), 200
+
+
+# ─── KEEP-ALIVE (anti cold-start) ────────────────────────────
+# Render's free tier spins down web services after ~15 minutes of
+# inactivity, and the next request then takes 30-60s to cold-start.
+# This background thread pings our OWN /health endpoint every 10
+# minutes so the service never goes idle long enough to sleep,
+# which keeps ESP32 requests fast and predictable during testing
+# and demos. Set SELF_URL to this service's own public Render URL.
+SELF_URL = os.environ.get("SELF_URL", "https://frsc-speedcar-detector.onrender.com")
+KEEPALIVE_INTERVAL_SEC = 600  # 10 minutes — safely under the 15-min sleep window
+
+def keep_alive_loop():
+    while True:
+        time.sleep(KEEPALIVE_INTERVAL_SEC)
+        try:
+            r = requests.get(f"{SELF_URL}/health", timeout=10)
+            print(f"[KEEPALIVE] Self-ping -> {r.status_code}")
+        except Exception as e:
+            print(f"[KEEPALIVE] Self-ping failed: {e}")
+
+threading.Thread(target=keep_alive_loop, daemon=True).start()
+
+
+
 #
 #  SPEED STRATEGY
 #  ──────────────
