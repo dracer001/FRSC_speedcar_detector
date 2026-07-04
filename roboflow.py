@@ -46,6 +46,7 @@ CONFIG = {
     "threshold":          "2.25",
 }
 
+<<<<<<< HEAD
 # ─── EMAIL (see core/alerter.py) ──────────────────────────────
 # Uses Brevo's HTTP API (works on Render's free tier — see the note at the
 # top of core/alerter.py) whenever BREVO_API_KEY is set as an env var.
@@ -58,6 +59,14 @@ alerter = EmailAlerter(
     smtp_port  = int(os.environ.get("SMTP_PORT", 465)),
     api_key    = os.environ.get("BREVO_API_KEY"),          # set this on Render
     api_sender = os.environ.get("BREVO_SENDER"),           # optional override
+=======
+# ─── EMAIL (stable, dedicated "ids" mailbox — see core/alerter.py) ──
+alerter = EmailAlerter(
+    sender    = os.environ.get("SMTP_SENDER",   "ids@yunivolt.com"),
+    password  = os.environ.get("SMTP_PASSWORD", "Intrusion123!"),
+    smtp_host = os.environ.get("SMTP_HOST",     "mail.yunivolt.com"),
+    smtp_port = int(os.environ.get("SMTP_PORT", 465)),
+>>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
 )
 
 # ─── CLOUDINARY CONFIG ───────────────────────────────────────

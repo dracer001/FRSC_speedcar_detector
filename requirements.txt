@@ -1,4 +1,7 @@
 flask
 requests
 cloudinary
+<<<<<<< HEAD
 
+=======
+>>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
