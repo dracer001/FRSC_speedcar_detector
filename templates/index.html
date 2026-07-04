@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}FRSC Speed Vigil Console{% endblock %}
+{% block extra_style %}
+<style>
+  body{align-items:center;display:flex;flex-direction:column}
+  .card{background:var(--card);padding:28px;border-radius:12px;border:1px solid var(--border);
+        width:100%;max-width:460px;box-shadow:0 10px 30px rgba(0,0,0,.5);margin-bottom:16px}
+  .config-box{background:var(--card-alt);padding:14px;border-radius:8px;margin-bottom:18px}
+  label{font-size:11px;color:var(--accent);display:block;margin-bottom:4px}
+  input[type=text],input[type=file]{width:100%;padding:9px 10px;margin:6px 0 10px;
+    border-radius:5px;border:1px solid #34495e;background:var(--bg);color:#ecf0f1;font-size:13px}
+  .row{display:flex;gap:8px;align-items:flex-end}
+  .row input{flex:1;margin-bottom:0}
+  .btn{width:100%;margin-top:10px}
+  .btn-sm{width:auto;padding:7px 14px;font-size:12px;margin-top:0}
+  .nav{display:flex;gap:10px;margin-bottom:24px}
+  .result{background:var(--card-alt);border-radius:8px;padding:14px;margin-top:14px;
+          font-size:12px;color:var(--blue);white-space:pre-wrap;word-break:break-all;display:none}
+  .result.show{display:block}
+  .divider{border-top:1px dashed var(--border);margin:18px 0}
+  .email-status{font-size:11px;color:var(--muted);margin-top:8px}
+</style>
+{% endblock %}
+
+{% block body %}
+  <h1>⚡ FRSC SPEED VIGIL</h1>
+  <p class="subtitle"><span class="dot"></span> System Operational &mdash; {{ sys_id }}</p>
+
+  <div class="nav">
+    <a href="/history"><button class="btn btn-outline" style="width:auto;padding:9px 20px">📋 View History</button></a>
+  </div>
+
+  <div class="card">
+    <div class="config-box">
+      <label>Recipient Officer Email</label>
+      <div class="row">
+        <input type="text" id="emailInput" value="{{ email }}">
+        <button class="btn btn-sm" onclick="updateConfig()">Update</button>
+      </div>
+      <button class="btn btn-outline btn-sm" style="width:100%;margin-top:10px" onclick="sendTestEmail()">
+        📧 Send Test Email
+      </button>
+      <div class="email-status" id="emailStatus"></div>
+    </div>
+
+    <label>Evidence Upload (Manual Test)</label>
+    <input type="file" id="imgFile" accept="image/*">
+    <input type="text" id="location" placeholder="Site Location (e.g., Minna Bypass)" value="FUT Minna">
+    <input type="text" id="speed" placeholder="Measured Speed (km/h)">
+    <button class="btn" id="inferBtn" onclick="submitForm()">⚡ EXECUTE INFERENCE</button>
+    <div class="result" id="result"></div>
+  </div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+  function updateConfig(){
+    fetch('/update_config',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({destination_email:document.getElementById('emailInput').value})
+    }).then(()=>toast('Officer contact updated.', 'success'))
+      .catch(()=>toast('Failed to update contact.', 'error'));
+  }
+
+  async function sendTestEmail(){
+    const statusEl = document.getElementById('emailStatus');
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = 'Sending…';
+    statusEl.textContent = '';
+    try{
+      const r = await fetch('/test_email', {method:'POST'});
+      const data = await r.json();
+      if(data.status === 'sent'){
+        toast('Test email sent to ' + data.recipient, 'success');
+        statusEl.textContent = '✓ Delivered to ' + data.recipient;
+      } else {
+        toast('Test email failed: ' + (data.error || 'unknown error'), 'error');
+        statusEl.textContent = '✗ ' + (data.error || 'Failed to send');
+      }
+    }catch(e){
+      toast('Request error: ' + e, 'error');
+    }
+    btn.disabled = false; btn.textContent = '📧 Send Test Email';
+  }
+
+  async function submitForm(){
+    const file = document.getElementById('imgFile').files[0];
+    if(!file){toast('Please select an image file first.', 'error');return;}
+    const fd = new FormData();
+    fd.append('imageFile', file);
+    fd.append('location', document.getElementById('location').value);
+    fd.append('speed',    document.getElementById('speed').value);
+    const btn = document.getElementById('inferBtn');
+    btn.textContent='Processing...'; btn.disabled=true;
+    try{
+      const r = await fetch('/upload_and_infer',{method:'POST',body:fd});
+      const data = await r.json();
+      const el = document.getElementById('result');
+      el.textContent = JSON.stringify(data, null, 2);
+      el.classList.add('show');
+    }catch(e){toast('Error: '+e, 'error');}
+    btn.textContent='⚡ EXECUTE INFERENCE'; btn.disabled=false;
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}FRSC — Detection History{% endblock %}
+{% block extra_style %}
+<style>
+  .stats{display:flex;gap:12px;max-width:1100px;margin:0 auto 24px;flex-wrap:wrap}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:10px;
+        padding:14px 20px;flex:1;min-width:140px}
+  .stat-label{font-size:11px;color:var(--muted);margin-bottom:4px}
+  .stat-value{font-size:22px;font-weight:700;color:var(--accent)}
+  .stat-value.green{color:var(--green)}
+  .stat-value.red{color:var(--red)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+        gap:16px;max-width:1100px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;
+        box-shadow:0 4px 16px rgba(0,0,0,.4);transition:.2s;position:relative}
+  .card:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .card-select{position:absolute;top:10px;left:10px;z-index:2;width:18px;height:18px;
+               accent-color:var(--accent);cursor:pointer}
+  .card-dl{position:absolute;top:8px;right:8px;z-index:2;background:rgba(11,14,20,.75);
+           border:1px solid var(--border);color:var(--text);border-radius:6px;
+           width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+           cursor:pointer;font-size:15px;transition:.15s}
+  .card-dl:hover{background:var(--accent);color:#000;border-color:var(--accent)}
+  .card-img{width:100%;height:180px;object-fit:cover;background:var(--bg);display:block}
+  .card-img-placeholder{width:100%;height:180px;background:var(--card-alt);
+    display:flex;align-items:center;justify-content:center;color:#4a5568;font-size:13px}
+  .card-body{padding:14px}
+  .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .badge-viol{background:#e74c3c22;color:var(--red);border:1px solid var(--red)}
+  .badge-ok{background:#27ae6022;color:var(--green);border:1px solid var(--green)}
+  .badge-none{background:#f39c1222;color:var(--accent);border:1px solid var(--accent)}
+  .ts{font-size:11px;color:var(--muted)}
+  .row{display:flex;justify-content:space-between;margin-bottom:6px}
+  .row-label{font-size:11px;color:var(--muted)}
+  .row-val{font-size:12px;color:var(--text);font-weight:600}
+  .speed-big{font-size:26px;font-weight:700;color:var(--accent);line-height:1}
+  .speed-unit{font-size:11px;color:var(--muted)}
+  .preds{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+  .pred-item{font-size:11px;color:var(--blue);margin-bottom:3px}
+  .conf-bar{height:4px;background:var(--border);border-radius:2px;margin-top:3px}
+  .conf-fill{height:4px;background:var(--accent);border-radius:2px}
+  .empty{text-align:center;color:#4a5568;padding:60px 20px;max-width:1100px;margin:0 auto;font-size:15px}
+  .filter-row{display:flex;gap:10px;max-width:1100px;margin:0 auto 20px;flex-wrap:wrap;align-items:center}
+  .filter-btn{background:var(--card-alt);border:1px solid #34495e;color:var(--text);
+              padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer}
+  .filter-btn.active,.filter-btn:hover{background:var(--accent);color:#000;border-color:var(--accent)}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .sel-count{font-size:12px;color:var(--muted)}
+</style>
+{% endblock %}
+
+{% block body %}
+  <div class="topbar">
+    <div>
+      <h1>📋 Detection History</h1>
+      <p class="subtitle">Last {{ records|length }} events — newest first</p>
+    </div>
+    <div class="toolbar">
+      <span class="sel-count" id="selCount">0 selected</span>
+      <button class="btn-ghost btn" id="selectAllBtn" onclick="toggleSelectAll()">Select All</button>
+      <button class="btn-outline btn" onclick="downloadSelectedZip()">⬇ Download Selected (.zip)</button>
+      <button class="btn-outline btn" onclick="downloadAllZip()">⬇ Download All (.zip)</button>
+      <button class="btn-danger btn" onclick="clearHistory()">🗑 Clear All</button>
+      <a href="/"><button class="btn-outline btn">← Dashboard</button></a>
+    </div>
+  </div>
+
+  {% set total = records|length %}
+  {% set violations = records|selectattr('is_violation','equalto',true)|list|length %}
+  {% set confirmed  = records|selectattr('car_detected','equalto',true)|list|length %}
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total Events</div><div class="stat-value">{{ total }}</div></div>
+    <div class="stat"><div class="stat-label">Speed Violations</div><div class="stat-value red">{{ violations }}</div></div>
+    <div class="stat"><div class="stat-label">Cars Confirmed</div><div class="stat-value red">{{ confirmed }}</div></div>
+    <div class="stat"><div class="stat-label">False Positives</div><div class="stat-value" style="color:var(--accent)">{{ violations - confirmed }}</div></div>
+  </div>
+
+  <div class="filter-row">
+    <span style="font-size:12px;color:var(--muted)">Filter:</span>
+    <button class="filter-btn active" onclick="filterCards('all',this)">All</button>
+    <button class="filter-btn" onclick="filterCards('violation',this)">Violations</button>
+    <button class="filter-btn" onclick="filterCards('confirmed',this)">Confirmed Cars</button>
+    <button class="filter-btn" onclick="filterCards('clear',this)">Speed OK</button>
+  </div>
+
+  {% if records %}
+  <div class="grid" id="grid">
+    {% for r in records %}
+    <div class="card"
+         data-viol="{{ 'true' if r.is_violation else 'false' }}"
+         data-confirmed="{{ 'true' if r.car_detected else 'false' }}"
+         data-url="{{ r.image_url }}"
+         data-name="{{ (r.public_id or ('FRSC_' ~ loop.index)) }}.jpg">
+
+      {% if r.image_url %}
+        <input type="checkbox" class="card-select" onclick="event.stopPropagation();updateSelCount()">
+        <div class="card-dl" title="Download image" onclick="downloadSingle('{{ r.image_url }}','{{ (r.public_id or ('FRSC_' ~ loop.index)) }}.jpg')">⬇</div>
+        <img class="card-img" src="{{ r.image_url }}" alt="Evidence" loading="lazy"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="card-img-placeholder" style="display:none">📷 Image unavailable</div>
+      {% else %}
+        <div class="card-img-placeholder">📷 No image</div>
+      {% endif %}
+
+      <div class="card-body">
+        <div class="card-header">
+          {% if r.car_detected %}
+            <span class="badge badge-viol">🚗 CAR CONFIRMED</span>
+          {% elif r.is_violation %}
+            <span class="badge badge-none">⚠ SPEED VIOLATION</span>
+          {% else %}
+            <span class="badge badge-ok">✓ Speed OK</span>
+          {% endif %}
+          <span class="ts">{{ r.timestamp }}</span>
+        </div>
+
+        <div style="margin-bottom:10px">
+          <div class="speed-big">{{ "%.2f"|format(r.speed|float) }}</div>
+          <div class="speed-unit">km/h &nbsp;·&nbsp; limit {{ r.threshold }} km/h</div>
+        </div>
+
+        <div class="row"><span class="row-label">📍 Location</span><span class="row-val">{{ r.location }}</span></div>
+        <div class="row"><span class="row-label">⏱ Travel time</span><span class="row-val">{{ r.travel_time or '—' }}</span></div>
+        <div class="row"><span class="row-label">🖼 Frames sent</span><span class="row-val">{{ r.frame_index or '?' }}</span></div>
+
+        {% if r.predictions %}
+        <div class="preds">
+          {% for p in r.predictions %}
+          <div class="pred-item">
+            {{ p.class }} &mdash; {{ "%.1f"|format(p.confidence * 100) }}% confidence
+            <div class="conf-bar"><div class="conf-fill" style="width:{{ (p.confidence*100)|int }}%"></div></div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">No detection history yet.<br>Events will appear here once the ESP32 starts sending data.</div>
+  {% endif %}
+{% endblock %}
+
+{% block extra_script %}
+<script>
+  function filterCards(type, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.card').forEach(card => {
+      const v = card.dataset.viol === 'true';
+      const c = card.dataset.confirmed === 'true';
+      let show = true;
+      if(type==='violation') show = v;
+      else if(type==='confirmed') show = c;
+      else if(type==='clear') show = !v;
+      card.style.display = show ? '' : 'none';
+    });
+  }
+
+  function clearHistory() {
+    if(!confirm('Clear all history records?')) return;
+    fetch('/history/clear', {method:'POST'})
+      .then(r=>r.json())
+      .then(()=>location.reload());
+  }
+
+  function visibleCards(){
+    return Array.from(document.querySelectorAll('.card')).filter(c => c.style.display !== 'none' && c.dataset.url);
+  }
+
+  function updateSelCount(){
+    const n = document.querySelectorAll('.card-select:checked').length;
+    document.getElementById('selCount').textContent = n + ' selected';
+  }
+
+  let allSelected = false;
+  function toggleSelectAll(){
+    allSelected = !allSelected;
+    visibleCards().forEach(c => {
+      const cb = c.querySelector('.card-select');
+      if(cb) cb.checked = allSelected;
+    });
+    document.getElementById('selectAllBtn').textContent = allSelected ? 'Deselect All' : 'Select All';
+    updateSelCount();
+  }
+
+  function downloadSingle(url, name){
+    const a = document.createElement('a');
+    a.href = '/history/download_image?url=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(name);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function downloadZip(items, zipName){
+    if(!items.length){ toast('Nothing to download.', 'error'); return; }
+    toast('Preparing ' + items.length + ' image(s)…');
+    try{
+      const r = await fetch('/history/download_zip', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({items})
+      });
+      if(!r.ok){ const e = await r.json().catch(()=>({error:'Failed'})); toast('Zip failed: ' + (e.error||r.status), 'error'); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = zipName;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('Download ready: ' + zipName, 'success');
+    }catch(e){
+      toast('Zip download error: ' + e, 'error');
+    }
+  }
+
+  function downloadSelectedZip(){
+    const items = Array.from(document.querySelectorAll('.card-select:checked')).map(cb => {
+      const card = cb.closest('.card');
+      return {url: card.dataset.url, name: card.dataset.name};
+    });
+    downloadZip(items, 'frsc_evidence_selected.zip');
+  }
+
+  function downloadAllZip(){
+    const items = visibleCards().map(c => ({url: c.dataset.url, name: c.dataset.name}));
+    downloadZip(items, 'frsc_evidence_all.zip');
+  }
+</script>
+{% endblock %}

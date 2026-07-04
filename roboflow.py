@@ -1,23 +1,39 @@
-from flask import Flask, request, render_template_string, jsonify
+"""
+roboflow.py
+───────────
+FRSC Speed Vigil — main Flask application.
+
+Restructured for maintainability:
+  • HTML moved out of Python strings into templates/ (Jinja, extends base.html)
+  • Email sending moved into core/alerter.py — a stable, thread-safe,
+    retrying SMTP sender on the dedicated "ids" mailbox (see core/alerter.py
+    for why this fixes the old flaky Gmail-based sending).
+  • New: /test_email route + a "Send Test Email" button on the dashboard.
+  • New: /history/download_image and /history/download_zip so evidence
+    images in the history view can be downloaded individually or in bulk.
+
+Routes, behavior, and response shapes for the ESP32-facing endpoints
+(/upload_and_infer, /health) are unchanged.
+"""
+
+from flask import (
+    Flask, request, render_template, jsonify, Response, send_file
+)
 import requests
 import os
-import smtplib
 import base64
+import io
 import json
 import threading
 import time
+import zipfile
 import cloudinary
 import cloudinary.uploader
 from datetime import datetime
-from email.message import EmailMessage
+
+from core.alerter import EmailAlerter
 
 app = Flask(__name__)
-
-# ─── SYSTEM SETTINGS ────────────────────────────────────────
-EMAIL_SENDER  = "daviddracer@gmail.com"
-EMAIL_PASS    = "ebtjeycmvlscobwr"
-SMTP_SERVER   = 'smtp.gmail.com'
-SMTP_PORT     = 465
 
 # ─── SYSTEM CONFIGURATION ────────────────────────────────────
 CONFIG = {
@@ -26,16 +42,30 @@ CONFIG = {
     "destination_email":  "david.m1901456@st.futminna.edu.ng",
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
-    "api_key":            "HrN6gq24W5BypZTSwcgC"
+    "api_key":            "HrN6gq24W5BypZTSwcgC",
+    "threshold":          "2.25",
 }
 
+# ─── EMAIL (stable, dedicated "ids" mailbox — see core/alerter.py) ──
+alerter = EmailAlerter(
+    sender    = os.environ.get("SMTP_SENDER",   "ids@yunivolt.com"),
+    password  = os.environ.get("SMTP_PASSWORD", "Intrusion123!"),
+    smtp_host = os.environ.get("SMTP_HOST",     "mail.yunivolt.com"),
+    smtp_port = int(os.environ.get("SMTP_PORT", 465)),
+)
+
 # ─── CLOUDINARY CONFIG ───────────────────────────────────────
+CLOUDINARY_CLOUD_NAME = "dc5hm0npx"
 cloudinary.config(
-    cloud_name = "dc5hm0npx",
+    cloud_name = CLOUDINARY_CLOUD_NAME,
     api_key    = "532695523155545",
-    api_secret = os.environ.get("CLOUDINARY_SECRET", "gjFx6nJ8BZmc-_azpwTnoJsgm4E"),   # set as env var on Render
+    api_secret = os.environ.get("CLOUDINARY_SECRET", "gjFx6nJ8BZmc-_azpwTnoJsgm4E"),
     secure     = True
 )
+
+# Only ever proxy-download images from Cloudinary — never an arbitrary
+# user-supplied URL (avoids turning the download routes into an SSRF proxy).
+ALLOWED_IMAGE_HOSTS = ("res.cloudinary.com",)
 
 # ─── HISTORY FILE ────────────────────────────────────────────
 HISTORY_FILE = "history.json"
@@ -68,11 +98,11 @@ def upload_to_cloudinary(img_bytes, public_id):
     try:
         result = cloudinary.uploader.upload(
             img_bytes,
-            public_id   = public_id,
-            folder      = "frsc_speedvigil",
+            public_id     = public_id,
+            folder        = "frsc_speedvigil",
             resource_type = "image",
-            overwrite   = True,
-            format      = "jpg"
+            overwrite     = True,
+            format        = "jpg"
         )
         url = result.get("secure_url", "")
         print(f"[CLOUDINARY] Uploaded: {url}")
@@ -81,32 +111,8 @@ def upload_to_cloudinary(img_bytes, public_id):
         print(f"[CLOUDINARY] Upload failed: {e}")
         return None
 
-# ─── EMAIL ───────────────────────────────────────────────────
-def send_violation_report(image_url, label, conf, loc, spd):
-    msg = EmailMessage()
-    report_id = datetime.now().strftime("%Y%m%d-%H%M")
-    msg['Subject'] = f'Traffic Record Update: {report_id} - {loc}'
-    msg['From']    = f"FRSC Automated System <{EMAIL_SENDER}>"
-    msg['To']      = CONFIG["destination_email"]
-    body = (
-        f"OFFICIAL TRAFFIC RECORD - {CONFIG['system_id']}\n"
-        f"-------------------------------------------\n"
-        f"Event Timestamp : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"Location        : {loc}\n"
-        f"Classification  : {label.upper()}\n"
-        f"Confidence      : {conf}%\n"
-        f"Recorded Speed  : {spd} km/h\n"
-        f"-------------------------------------------\n"
-        f"Evidence Image  : {image_url}\n"
-    )
-    msg.set_content(body)
-    try:
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as smtp:
-            smtp.login(EMAIL_SENDER, EMAIL_PASS)
-            smtp.send_message(msg)
-        print(f"[EMAIL] Report sent to {CONFIG['destination_email']}")
-    except Exception as e:
-        print(f"[EMAIL] Failed: {e}")
+def _is_allowed_image_url(url: str) -> bool:
+    return bool(url) and any(f"://{host}" in url for host in ALLOWED_IMAGE_HOSTS)
 
 
 # ════════════════════════════════════════════════════════════
@@ -116,292 +122,18 @@ def send_violation_report(image_url, label, conf, loc, spd):
 # ─── HOME ────────────────────────────────────────────────────
 @app.route('/')
 def index():
-    return render_template_string("""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>FRSC Speed Vigil Console</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0b0e14;color:#e0e0e0;font-family:'Segoe UI',Tahoma,sans-serif;
-         display:flex;flex-direction:column;align-items:center;padding:40px 16px;min-height:100vh}
-    h1{color:#f39c12;letter-spacing:2px;font-size:22px;margin-bottom:4px}
-    .subtitle{color:#7f8c8d;font-size:13px;margin-bottom:28px;display:flex;align-items:center;gap:6px}
-    .dot{width:9px;height:9px;background:#27ae60;border-radius:50%;display:inline-block}
-    .card{background:#151921;padding:28px;border-radius:12px;border:1px solid #232a35;
-          width:100%;max-width:460px;box-shadow:0 10px 30px rgba(0,0,0,.5);margin-bottom:16px}
-    .config-box{background:#1c222d;padding:14px;border-radius:8px;margin-bottom:18px}
-    label{font-size:11px;color:#f39c12;display:block;margin-bottom:4px}
-    input[type=text],input[type=file]{width:100%;padding:9px 10px;margin:6px 0 10px;
-      border-radius:5px;border:1px solid #34495e;background:#0b0e14;color:#ecf0f1;font-size:13px}
-    .row{display:flex;gap:8px;align-items:flex-end}
-    .row input{flex:1;margin-bottom:0}
-    .btn{background:#f39c12;color:#000;border:none;padding:11px 18px;border-radius:5px;
-         font-weight:700;cursor:pointer;transition:.2s;font-size:13px;width:100%;margin-top:10px}
-    .btn:hover{background:#e67e22;transform:translateY(-1px)}
-    .btn-sm{width:auto;padding:7px 14px;font-size:12px;margin-top:0}
-    .btn-outline{background:transparent;border:1px solid #f39c12;color:#f39c12;margin-top:0}
-    .btn-outline:hover{background:#f39c12;color:#000}
-    .nav{display:flex;gap:10px;margin-bottom:24px}
-    .result{background:#1c222d;border-radius:8px;padding:14px;margin-top:14px;
-            font-size:12px;color:#7fb3d3;white-space:pre-wrap;word-break:break-all;display:none}
-    .result.show{display:block}
-  </style>
-</head>
-<body>
-  <h1>⚡ FRSC SPEED VIGIL</h1>
-  <p class="subtitle"><span class="dot"></span> System Operational &mdash; {{ sys_id }}</p>
-
-  <div class="nav">
-    <a href="/history"><button class="btn btn-outline" style="width:auto;padding:9px 20px">📋 View History</button></a>
-  </div>
-
-  <div class="card">
-    <div class="config-box">
-      <label>Recipient Officer Email</label>
-      <div class="row">
-        <input type="text" id="emailInput" value="{{ email }}">
-        <button class="btn btn-sm" onclick="updateConfig()">Update</button>
-      </div>
-    </div>
-
-    <label>Evidence Upload (Manual Test)</label>
-    <input type="file" id="imgFile" accept="image/*">
-    <input type="text" id="location" placeholder="Site Location (e.g., Minna Bypass)" value="FUT Minna">
-    <input type="text" id="speed" placeholder="Measured Speed (km/h)">
-    <button class="btn" onclick="submitForm()">⚡ EXECUTE INFERENCE</button>
-    <div class="result" id="result"></div>
-  </div>
-
-  <script>
-    function updateConfig(){
-      fetch('/update_config',{method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({destination_email:document.getElementById('emailInput').value})
-      }).then(()=>alert('Officer contact updated.'));
-    }
-
-    async function submitForm(){
-      const file = document.getElementById('imgFile').files[0];
-      if(!file){alert('Please select an image file first.');return;}
-      const fd = new FormData();
-      fd.append('imageFile', file);
-      fd.append('location', document.getElementById('location').value);
-      fd.append('speed',    document.getElementById('speed').value);
-      const btn = document.querySelector('.btn[onclick="submitForm()"]');
-      btn.textContent='Processing...'; btn.disabled=true;
-      try{
-        const r = await fetch('/upload_and_infer',{method:'POST',body:fd});
-        const data = await r.json();
-        const el = document.getElementById('result');
-        el.textContent = JSON.stringify(data, null, 2);
-        el.classList.add('show');
-      }catch(e){alert('Error: '+e);}
-      btn.textContent='⚡ EXECUTE INFERENCE'; btn.disabled=false;
-    }
-  </script>
-</body>
-</html>
-""", email=CONFIG["destination_email"], sys_id=CONFIG["system_id"])
+    return render_template(
+        "index.html",
+        email=CONFIG["destination_email"],
+        sys_id=CONFIG["system_id"],
+    )
 
 
 # ─── HISTORY PAGE ────────────────────────────────────────────
 @app.route('/history')
 def history_page():
     records = load_history()
-    return render_template_string("""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>FRSC — Detection History</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0b0e14;color:#e0e0e0;font-family:'Segoe UI',Tahoma,sans-serif;
-         padding:32px 16px;min-height:100vh}
-    h1{color:#f39c12;letter-spacing:2px;font-size:20px;margin-bottom:4px}
-    .topbar{display:flex;justify-content:space-between;align-items:center;
-            max-width:1100px;margin:0 auto 24px}
-    .subtitle{color:#7f8c8d;font-size:12px}
-    .btn-back{background:transparent;border:1px solid #f39c12;color:#f39c12;
-              padding:8px 18px;border-radius:5px;font-weight:700;cursor:pointer;
-              font-size:13px;text-decoration:none}
-    .btn-back:hover{background:#f39c12;color:#000}
-    .stats{display:flex;gap:12px;max-width:1100px;margin:0 auto 24px;flex-wrap:wrap}
-    .stat{background:#151921;border:1px solid #232a35;border-radius:10px;
-          padding:14px 20px;flex:1;min-width:140px}
-    .stat-label{font-size:11px;color:#7f8c8d;margin-bottom:4px}
-    .stat-value{font-size:22px;font-weight:700;color:#f39c12}
-    .stat-value.green{color:#27ae60}
-    .stat-value.red{color:#e74c3c}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
-          gap:16px;max-width:1100px;margin:0 auto}
-    .card{background:#151921;border:1px solid #232a35;border-radius:12px;overflow:hidden;
-          box-shadow:0 4px 16px rgba(0,0,0,.4);transition:.2s}
-    .card:hover{transform:translateY(-2px);border-color:#f39c12}
-    .card-img{width:100%;height:180px;object-fit:cover;background:#0b0e14;display:block}
-    .card-img-placeholder{width:100%;height:180px;background:#1c222d;
-      display:flex;align-items:center;justify-content:center;color:#4a5568;font-size:13px}
-    .card-body{padding:14px}
-    .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-    .badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
-    .badge-viol{background:#e74c3c22;color:#e74c3c;border:1px solid #e74c3c}
-    .badge-ok{background:#27ae6022;color:#27ae60;border:1px solid #27ae60}
-    .badge-none{background:#f39c1222;color:#f39c12;border:1px solid #f39c12}
-    .ts{font-size:11px;color:#7f8c8d}
-    .row{display:flex;justify-content:space-between;margin-bottom:6px}
-    .row-label{font-size:11px;color:#7f8c8d}
-    .row-val{font-size:12px;color:#e0e0e0;font-weight:600}
-    .speed-big{font-size:26px;font-weight:700;color:#f39c12;line-height:1}
-    .speed-unit{font-size:11px;color:#7f8c8d}
-    .preds{margin-top:8px;padding-top:8px;border-top:1px solid #232a35}
-    .pred-item{font-size:11px;color:#7fb3d3;margin-bottom:3px}
-    .conf-bar{height:4px;background:#232a35;border-radius:2px;margin-top:3px}
-    .conf-fill{height:4px;background:#f39c12;border-radius:2px}
-    .empty{text-align:center;color:#4a5568;padding:60px 20px;max-width:1100px;margin:0 auto;font-size:15px}
-    .clear-btn{background:#e74c3c22;border:1px solid #e74c3c;color:#e74c3c;
-               padding:7px 16px;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600}
-    .clear-btn:hover{background:#e74c3c;color:#fff}
-    .filter-row{display:flex;gap:10px;max-width:1100px;margin:0 auto 20px;flex-wrap:wrap;align-items:center}
-    .filter-btn{background:#1c222d;border:1px solid #34495e;color:#e0e0e0;
-                padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer}
-    .filter-btn.active,.filter-btn:hover{background:#f39c12;color:#000;border-color:#f39c12}
-  </style>
-</head>
-<body>
-  <div class="topbar">
-    <div>
-      <h1>📋 Detection History</h1>
-      <p class="subtitle">Last {{ records|length }} events — newest first</p>
-    </div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <button class="clear-btn" onclick="clearHistory()">🗑 Clear All</button>
-      <a href="/" class="btn-back">← Dashboard</a>
-    </div>
-  </div>
-
-  <!-- Stats bar -->
-  {% set total = records|length %}
-  {% set violations = records|selectattr('is_violation','equalto',true)|list|length %}
-  {% set confirmed  = records|selectattr('car_detected','equalto',true)|list|length %}
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-label">Total Events</div>
-      <div class="stat-value">{{ total }}</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Speed Violations</div>
-      <div class="stat-value red">{{ violations }}</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Cars Confirmed</div>
-      <div class="stat-value red">{{ confirmed }}</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">False Positives</div>
-      <div class="stat-value" style="color:#f39c12">{{ violations - confirmed }}</div>
-    </div>
-  </div>
-
-  <!-- Filter buttons -->
-  <div class="filter-row">
-    <span style="font-size:12px;color:#7f8c8d">Filter:</span>
-    <button class="filter-btn active" onclick="filter('all',this)">All</button>
-    <button class="filter-btn" onclick="filter('violation',this)">Violations</button>
-    <button class="filter-btn" onclick="filter('confirmed',this)">Confirmed Cars</button>
-    <button class="filter-btn" onclick="filter('clear',this)">Speed OK</button>
-  </div>
-
-  {% if records %}
-  <div class="grid" id="grid">
-    {% for r in records %}
-    <div class="card"
-         data-viol="{{ 'true' if r.is_violation else 'false' }}"
-         data-confirmed="{{ 'true' if r.car_detected else 'false' }}">
-
-      {% if r.image_url %}
-        <img class="card-img" src="{{ r.image_url }}" alt="Evidence" loading="lazy"
-             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="card-img-placeholder" style="display:none">📷 Image unavailable</div>
-      {% else %}
-        <div class="card-img-placeholder">📷 No image</div>
-      {% endif %}
-
-      <div class="card-body">
-        <div class="card-header">
-          {% if r.car_detected %}
-            <span class="badge badge-viol">🚗 CAR CONFIRMED</span>
-          {% elif r.is_violation %}
-            <span class="badge badge-none">⚠ SPEED VIOLATION</span>
-          {% else %}
-            <span class="badge badge-ok">✓ Speed OK</span>
-          {% endif %}
-          <span class="ts">{{ r.timestamp }}</span>
-        </div>
-
-        <div style="margin-bottom:10px">
-          <div class="speed-big">{{ "%.2f"|format(r.speed|float) }}</div>
-          <div class="speed-unit">km/h &nbsp;·&nbsp; limit {{ r.threshold }} km/h</div>
-        </div>
-
-        <div class="row">
-          <span class="row-label">📍 Location</span>
-          <span class="row-val">{{ r.location }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">⏱ Travel time</span>
-          <span class="row-val">{{ r.travel_time or '—' }}</span>
-        </div>
-        <div class="row">
-          <span class="row-label">🖼 Frames sent</span>
-          <span class="row-val">{{ r.frame_index or '?' }}</span>
-        </div>
-
-        {% if r.predictions %}
-        <div class="preds">
-          {% for p in r.predictions %}
-          <div class="pred-item">
-            {{ p.class }} &mdash; {{ "%.1f"|format(p.confidence * 100) }}% confidence
-            <div class="conf-bar"><div class="conf-fill" style="width:{{ (p.confidence*100)|int }}%"></div></div>
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="empty">No detection history yet.<br>Events will appear here once the ESP32 starts sending data.</div>
-  {% endif %}
-
-<script>
-  function filter(type, btn) {
-    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelectorAll('.card').forEach(card => {
-      const v = card.dataset.viol === 'true';
-      const c = card.dataset.confirmed === 'true';
-      let show = true;
-      if(type==='violation') show = v;
-      else if(type==='confirmed') show = c;
-      else if(type==='clear') show = !v;
-      card.style.display = show ? '' : 'none';
-    });
-  }
-  function clearHistory() {
-    if(!confirm('Clear all history records?')) return;
-    fetch('/history/clear', {method:'POST'})
-      .then(r=>r.json())
-      .then(()=>location.reload());
-  }
-</script>
-</body>
-</html>
-""", records=records)
+    return render_template("history.html", records=records)
 
 
 # ─── HISTORY API ─────────────────────────────────────────────
@@ -415,10 +147,100 @@ def history_clear():
     return jsonify({"status": "cleared"})
 
 
+# ─── IMAGE DOWNLOAD (single) ─────────────────────────────────
+@app.route('/history/download_image')
+def download_image():
+    url  = request.args.get('url', '')
+    name = request.args.get('name') or 'evidence.jpg'
+    if not _is_allowed_image_url(url):
+        return jsonify({"error": "Invalid or disallowed image URL"}), 400
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        return jsonify({"error": f"Fetch failed: {e}"}), 502
+
+    if not name.lower().endswith(('.jpg', '.jpeg', '.png')):
+        name += '.jpg'
+
+    return Response(
+        resp.content,
+        mimetype=resp.headers.get('Content-Type', 'image/jpeg'),
+        headers={"Content-Disposition": f'attachment; filename="{name}"'}
+    )
+
+
+# ─── IMAGE DOWNLOAD (bulk zip) ────────────────────────────────
+@app.route('/history/download_zip', methods=['POST'])
+def download_zip():
+    data  = request.get_json(silent=True) or {}
+    items = data.get('items', [])
+    if not items:
+        return jsonify({"error": "No items provided"}), 400
+    if len(items) > 200:
+        return jsonify({"error": "Too many items (max 200)"}), 400
+
+    buf = io.BytesIO()
+    added, skipped = 0, 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        used_names = set()
+        for item in items:
+            url  = item.get('url', '')
+            name = item.get('name') or 'evidence.jpg'
+            if not _is_allowed_image_url(url):
+                skipped += 1
+                continue
+            try:
+                resp = requests.get(url, timeout=15)
+                resp.raise_for_status()
+            except Exception as e:
+                print(f"[ZIP] Skipping {url}: {e}")
+                skipped += 1
+                continue
+
+            if not name.lower().endswith(('.jpg', '.jpeg', '.png')):
+                name += '.jpg'
+            # avoid collisions inside the zip
+            base_name, n = name, 1
+            while name in used_names:
+                stem, ext = os.path.splitext(base_name)
+                name = f"{stem}_{n}{ext}"
+                n += 1
+            used_names.add(name)
+
+            zf.writestr(name, resp.content)
+            added += 1
+
+    if added == 0:
+        return jsonify({"error": "None of the requested images could be fetched"}), 502
+
+    buf.seek(0)
+    print(f"[ZIP] Built archive: {added} added, {skipped} skipped")
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name="frsc_evidence_bulk.zip",
+    )
+
+
+# ─── TEST EMAIL ───────────────────────────────────────────────
+@app.route('/test_email', methods=['POST'])
+def test_email():
+    recipient = CONFIG["destination_email"]
+    ok, info = alerter.send_test(recipient)
+    status_code = 200 if ok else 502
+    return jsonify({
+        "status": "sent" if ok else "failed",
+        "recipient": recipient,
+        "error": None if ok else info,
+    }), status_code
+
+
 # ─── CONFIG UPDATE ───────────────────────────────────────────
 @app.route('/update_config', methods=['POST'])
 def update_config():
-    data = request.json
+    data = request.json or {}
     if "destination_email" in data:
         CONFIG["destination_email"] = data["destination_email"]
         print(f"[CONFIG] Email updated: {CONFIG['destination_email']}")
@@ -439,12 +261,18 @@ def background_save(img_bytes, public_id, record, car_detected, predictions):
 
     if car_detected and image_url:
         best_conf = max((p['confidence'] for p in predictions), default=0)
-        send_violation_report(
-            image_url, "toy_car",
-            round(best_conf * 100, 2),
-            record["location"],
-            record["speed"]
+        ok, info = alerter.send_violation_report(
+            recipient  = CONFIG["destination_email"],
+            image_url  = image_url,
+            label      = "toy_car",
+            confidence = round(best_conf * 100, 2),
+            location   = record["location"],
+            speed      = record["speed"],
+            threshold  = record["threshold"],
+            system_id  = CONFIG["system_id"],
         )
+        if not ok:
+            print(f"[EMAIL] Violation report failed: {info}")
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────
@@ -498,7 +326,7 @@ threading.Thread(target=keep_alive_loop, daemon=True).start()
 #  Slow path  (background thread, ESP32 already gone):
 #    4. Upload image to Cloudinary               — ~800-2000 ms
 #    5. Append history record to JSON file       — local, instant
-#    6. Send email if car confirmed              — ~500-1500 ms
+#    6. Send email if car confirmed              — ~500-1500 ms (retried)
 #
 #  This keeps the round-trip to the ESP32 at ~300-700 ms instead
 #  of 2-4 seconds.
@@ -561,10 +389,11 @@ def upload_and_infer():
         "timestamp":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "location":     loc,
         "speed":        spd,
-        "threshold":    "2.25",
+        "threshold":    CONFIG["threshold"],
         "travel_time":  travel_t,
         "frame_index":  frame_idx,
         "image_url":    "",          # patched by background thread
+        "public_id":    public_id,
         "is_violation": is_violation,
         "car_detected": car_detected,
         "predictions":  predictions,
