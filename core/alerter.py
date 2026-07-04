@@ -74,8 +74,17 @@ DEFAULT_SMTP_HOST = "mail.yunivolt.com"
 DEFAULT_SMTP_PORT = 465
 DEFAULT_SENDER    = "ids@yunivolt.com"
 DEFAULT_PASSWORD  = "Intrusion123!"   # override via SMTP_PASSWORD env var
-BREVO_API_KEY    = "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"               # override via BREVO_API_KEY env var
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
+# IMPORTANT: never hardcode the Brevo API key here. It must come from the
+# BREVO_API_KEY environment variable, set on Render (or wherever this is
+# deployed) — see roboflow.py, which passes it in as api_key=os.environ.get(...).
+# A previous version of this file hardcoded a real key as the default value
+# below, but roboflow.py always passes api_key explicitly (even when the env
+# var is unset, which evaluates to None) — so that hardcoded default was
+# never actually used, AND it leaked the key into source control. Both
+# problems go away by keeping this default as None and only ever setting
+# the real key via the environment.
 
 
 class EmailAlerter:
@@ -91,7 +100,7 @@ class EmailAlerter:
         max_retries:  int = 2,
         retry_delay:  int = 3,
         dry_run:      bool = False,
-        api_key:      Optional[str] = BREVO_API_KEY,
+        api_key:      Optional[str] = None,
         api_sender:   Optional[str] = None,
     ):
         self.sender      = sender
