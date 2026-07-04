@@ -18,6 +18,16 @@ This module instead uses the same pattern as the working IDS alerter:
   • A short retry loop (2 attempts w/ backoff) for transient network blips.
   • A single thread-safe class so both violation reports and test emails
     share the exact same, already-proven send path.
+
+NOTE ON SPAM FILTERING:
+An earlier version of this email used a bright color banner, emoji in the
+subject/body, and no Date/Message-ID headers — the receiving SMTP server
+rejected it outright as "high-probability spam" (550). Marketing-style
+HTML (big colored blocks, emoji, decorative bullets) reads exactly like a
+spam template to content filters, and missing standard headers is itself
+a red flag. The email below is deliberately plain: a simple bordered box,
+black text on white, no emoji, no bright backgrounds, and proper
+Date/Message-ID headers — the same shape as a normal transactional email.
 """
 
 import smtplib
@@ -28,6 +38,7 @@ import threading
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from typing import Optional, Tuple
 
 log = logging.getLogger("frsc.alerter")
@@ -39,8 +50,6 @@ DEFAULT_SMTP_HOST = "mail.yunivolt.com"
 DEFAULT_SMTP_PORT = 465
 DEFAULT_SENDER    = "ids@yunivolt.com"
 DEFAULT_PASSWORD  = "Intrusion123!"   # override via SMTP_PASSWORD env var
-
-ACCENT = "#f39c12"   # FRSC orange, matches the dashboard theme
 
 
 class EmailAlerter:
@@ -66,7 +75,7 @@ class EmailAlerter:
         self.retry_delay = retry_delay
         self.dry_run     = dry_run
 
-        self._lock       = threading.Lock()
+        self._lock        = threading.Lock()
         self.sent_count   = 0
         self.failed_count = 0
 
@@ -75,10 +84,14 @@ class EmailAlerter:
         if not recipient:
             return False, "No recipient email configured"
 
+        domain = self.sender.split("@")[-1] if "@" in self.sender else "yunivolt.com"
+
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"FRSC Speed Vigil <{self.sender}>"
-        msg["To"]      = recipient
+        msg["Subject"]    = subject
+        msg["From"]       = f"FRSC Speed Vigil <{self.sender}>"
+        msg["To"]         = recipient
+        msg["Date"]       = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=domain)
         msg.attach(MIMEText(text_body, "plain"))
         msg.attach(MIMEText(html_body, "html"))
 
@@ -112,36 +125,30 @@ class EmailAlerter:
         log.error(f"[EMAIL] Giving up after {self.max_retries} attempts: {last_err}")
         return False, last_err
 
-    # ── shared HTML shell ───────────────────────────────────────────────
-    def _wrap_html(self, heading: str, subtitle: str, rows: list, image_url: Optional[str] = None) -> str:
+    # ── shared HTML shell — plain, no marketing-style styling ───────────
+    def _wrap_html(self, heading: str, rows: list, image_url: Optional[str] = None) -> str:
         rows_html = "".join(
-            f"<tr><td style='padding:6px 14px;color:#8a94a3;font-size:12px;'>{k}</td>"
-            f"<td style='padding:6px 14px;font-weight:600;font-size:13px;color:#e6e6e6;'>{v}</td></tr>"
+            f"<tr>"
+            f"<td style='padding:4px 10px 4px 0;color:#555555;font-size:13px;white-space:nowrap;'>{k}</td>"
+            f"<td style='padding:4px 0;color:#111111;font-size:13px;'>{v}</td>"
+            f"</tr>"
             for k, v in rows
         )
         image_block = (
-            f"<div style='margin-top:16px;'><img src='{image_url}' style='width:100%;"
-            f"border-radius:8px;border:1px solid #232a35;' alt='Evidence'></div>"
+            f"<p style='margin:16px 0 0;'><a href='{image_url}'>View evidence image</a></p>"
             if image_url else ""
         )
-        return f"""
-<html><body style="margin:0;padding:0;background:#0b0e14;font-family:'Segoe UI',Tahoma,sans-serif;">
-<div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-  <div style="background:#151921;border:1px solid #232a35;border-radius:12px;overflow:hidden;">
-    <div style="background:{ACCENT};color:#000;padding:18px 22px;">
-      <h2 style="margin:0;font-size:17px;letter-spacing:1px;">&#9889; {heading}</h2>
-      <p style="margin:4px 0 0;font-size:12px;opacity:.75;">{subtitle}</p>
-    </div>
-    <div style="padding:20px 22px;">
-      <table style="border-collapse:collapse;width:100%;background:#1c222d;border-radius:8px;overflow:hidden;">
-        {rows_html}
-      </table>
-      {image_block}
-      <p style="font-size:11px;color:#5a6472;margin-top:18px;">
-        This message was generated automatically by the FRSC Speed Vigil system.
-      </p>
-    </div>
-  </div>
+        return f"""<html><body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111111;">
+<div style="max-width:520px;margin:0 auto;padding:20px;">
+  <p style="font-size:14px;margin:0 0 4px;font-weight:bold;">{heading}</p>
+  <hr style="border:none;border-top:1px solid #dddddd;margin:8px 0 16px;">
+  <table style="border-collapse:collapse;">
+    {rows_html}
+  </table>
+  {image_block}
+  <p style="font-size:11px;color:#888888;margin-top:20px;">
+    Automated message from the FRSC Speed Vigil system.
+  </p>
 </div>
 </body></html>"""
 
@@ -158,28 +165,27 @@ class EmailAlerter:
         system_id:  str = "SPEED-VIGIL-001",
     ) -> Tuple[bool, str]:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        subject = f"[FRSC] Speed Violation Report — {location} — {ts}"
+        subject = f"FRSC Speed Vigil - Violation at {location}"
 
         rows = [
-            ("Event Timestamp", ts),
-            ("Location",        location),
-            ("Classification",  label.upper()),
-            ("Confidence",      f"{confidence:.1f}%"),
-            ("Recorded Speed",  f"{speed} km/h"),
-            ("Speed Threshold", f"{threshold} km/h"),
-            ("System ID",       system_id),
+            ("Time",       ts),
+            ("Location",   location),
+            ("Detected",   label),
+            ("Confidence", f"{confidence:.1f}%"),
+            ("Speed",      f"{speed} km/h"),
+            ("Threshold",  f"{threshold} km/h"),
+            ("System ID",  system_id),
         ]
         text_lines = [
-            "OFFICIAL TRAFFIC RECORD",
-            "-" * 45,
-        ] + [f"{k:<18}: {v}" for k, v in rows] + [
-            "-" * 45,
-            f"Evidence Image  : {image_url}",
+            "FRSC Speed Vigil - Violation Report",
+            "",
+        ] + [f"{k}: {v}" for k, v in rows] + [
+            "",
+            f"Evidence image: {image_url}",
         ]
         text = "\n".join(text_lines)
         html = self._wrap_html(
-            heading="Speed Violation Detected",
-            subtitle=f"{system_id} &bull; {ts}",
+            heading="FRSC Speed Vigil - Violation Report",
             rows=rows,
             image_url=image_url,
         )
@@ -187,17 +193,19 @@ class EmailAlerter:
 
     def send_test(self, recipient: str) -> Tuple[bool, str]:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        subject = "[FRSC] Test Alert — System Check"
+        subject = "FRSC Speed Vigil - Test Email"
         rows = [
-            ("Time",       ts),
-            ("SMTP Host",  f"{self.smtp_host}:{self.smtp_port}"),
-            ("Sender",     self.sender),
-            ("Note",       "This is a test email confirming delivery is working."),
+            ("Time",   ts),
+            ("Server", f"{self.smtp_host}"),
+            ("Sender", self.sender),
         ]
-        text = "FRSC SPEED VIGIL — TEST EMAIL\n" + "\n".join(f"{k:<12}: {v}" for k, v in rows)
+        text = (
+            "This is a test email from the FRSC Speed Vigil system.\n\n"
+            + "\n".join(f"{k}: {v}" for k, v in rows)
+            + "\n\nIf you received this, email delivery is working correctly."
+        )
         html = self._wrap_html(
-            heading="Test Alert",
-            subtitle="System Check &bull; " + ts,
-            rows=rows,
+            heading="FRSC Speed Vigil - Test Email",
+            rows=rows + [("Note", "If you received this, email delivery is working correctly.")],
         )
         return self._send(recipient, subject, text, html)
