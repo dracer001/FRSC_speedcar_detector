@@ -28,7 +28,6 @@ spam template to content filters, and missing standard headers is itself
 a red flag. The email below is deliberately plain: a simple bordered box,
 black text on white, no emoji, no bright backgrounds, and proper
 Date/Message-ID headers — the same shape as a normal transactional email.
-<<<<<<< HEAD
 
 NOTE ON RENDER FREE TIER — "works locally, times out when deployed":
 Since September 2025, Render blocks outbound traffic to SMTP ports
@@ -52,8 +51,6 @@ verified sender email (no full domain/DKIM setup required):
   4. Set BREVO_API_KEY (and optionally BREVO_SENDER) as env vars on Render.
 If BREVO_API_KEY isn't set, this module falls back to the original SMTP
 path automatically — so local development keeps working with zero setup.
-=======
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
 """
 
 import smtplib
@@ -61,10 +58,7 @@ import ssl
 import time
 import logging
 import threading
-<<<<<<< HEAD
 import requests
-=======
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -73,22 +67,15 @@ from typing import Optional, Tuple
 
 log = logging.getLogger("frsc.alerter")
 
-<<<<<<< HEAD
 # ── System mailbox (the "ids email") — used for the SMTP fallback path ─────
-=======
-# ── System mailbox (the "ids email") ───────────────────────────────────────
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
 # Matches the credentials already proven to work reliably. Override with
 # env vars in production rather than editing these defaults.
 DEFAULT_SMTP_HOST = "mail.yunivolt.com"
 DEFAULT_SMTP_PORT = 465
 DEFAULT_SENDER    = "ids@yunivolt.com"
 DEFAULT_PASSWORD  = "Intrusion123!"   # override via SMTP_PASSWORD env var
-<<<<<<< HEAD
 BREVO_API_KEY    = "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"               # override via BREVO_API_KEY env var
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
-=======
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
 
 
 class EmailAlerter:
@@ -96,7 +83,6 @@ class EmailAlerter:
 
     def __init__(
         self,
-<<<<<<< HEAD
         sender:       str = DEFAULT_SENDER,
         password:     str = DEFAULT_PASSWORD,
         smtp_host:    str = DEFAULT_SMTP_HOST,
@@ -107,16 +93,6 @@ class EmailAlerter:
         dry_run:      bool = False,
         api_key:      Optional[str] = BREVO_API_KEY,
         api_sender:   Optional[str] = None,
-=======
-        sender:      str = DEFAULT_SENDER,
-        password:    str = DEFAULT_PASSWORD,
-        smtp_host:   str = DEFAULT_SMTP_HOST,
-        smtp_port:   int = DEFAULT_SMTP_PORT,
-        timeout:     int = 15,
-        max_retries: int = 2,
-        retry_delay: int = 3,
-        dry_run:     bool = False,
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
     ):
         self.sender      = sender
         self.password    = password
@@ -127,28 +103,20 @@ class EmailAlerter:
         self.retry_delay = retry_delay
         self.dry_run     = dry_run
 
-<<<<<<< HEAD
         # HTTP (Brevo) transport — used automatically when api_key is set,
         # since it isn't affected by Render's free-tier SMTP port block.
         self.api_key    = api_key
         self.api_sender = api_sender or sender
 
-=======
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
         self._lock        = threading.Lock()
         self.sent_count   = 0
         self.failed_count = 0
 
-<<<<<<< HEAD
     # ── dispatcher: HTTP API if configured, else SMTP ───────────────────
-=======
-    # ── low-level, retrying send ────────────────────────────────────────
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
     def _send(self, recipient: str, subject: str, text_body: str, html_body: str) -> Tuple[bool, str]:
         if not recipient:
             return False, "No recipient email configured"
 
-<<<<<<< HEAD
         if self.dry_run:
             log.info(f"[DRY RUN] Would send: {subject} -> {recipient}")
             with self._lock:
@@ -198,8 +166,6 @@ class EmailAlerter:
 
     # ── transport 2: raw SMTP (works locally; blocked on Render free tier) ─
     def _send_via_smtp(self, recipient: str, subject: str, text_body: str, html_body: str) -> Tuple[bool, str]:
-=======
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
         domain = self.sender.split("@")[-1] if "@" in self.sender else "yunivolt.com"
 
         msg = MIMEMultipart("alternative")
@@ -211,15 +177,6 @@ class EmailAlerter:
         msg.attach(MIMEText(text_body, "plain"))
         msg.attach(MIMEText(html_body, "html"))
 
-<<<<<<< HEAD
-=======
-        if self.dry_run:
-            log.info(f"[DRY RUN] Would send: {subject} -> {recipient}")
-            with self._lock:
-                self.sent_count += 1
-            return True, "sent (dry run)"
-
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
         last_err = "unknown error"
         for attempt in range(1, self.max_retries + 1):
             try:
@@ -231,29 +188,17 @@ class EmailAlerter:
                     srv.sendmail(self.sender, recipient, msg.as_string())
                 with self._lock:
                     self.sent_count += 1
-<<<<<<< HEAD
                 log.info(f"[EMAIL:smtp] Sent to {recipient}: {subject}")
                 return True, "sent"
             except Exception as e:
                 last_err = str(e)
                 log.warning(f"[EMAIL:smtp] Attempt {attempt}/{self.max_retries} failed: {last_err}")
-=======
-                log.info(f"[EMAIL] Sent to {recipient}: {subject}")
-                return True, "sent"
-            except Exception as e:
-                last_err = str(e)
-                log.warning(f"[EMAIL] Attempt {attempt}/{self.max_retries} failed: {last_err}")
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
                 if attempt < self.max_retries:
                     time.sleep(self.retry_delay)
 
         with self._lock:
             self.failed_count += 1
-<<<<<<< HEAD
         log.error(f"[EMAIL:smtp] Giving up after {self.max_retries} attempts: {last_err}")
-=======
-        log.error(f"[EMAIL] Giving up after {self.max_retries} attempts: {last_err}")
->>>>>>> d9389982f4b014994f488e141ce3bda8390d9da4
         return False, last_err
 
     # ── shared HTML shell — plain, no marketing-style styling ───────────
