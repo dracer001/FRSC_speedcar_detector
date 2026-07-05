@@ -43,8 +43,8 @@ CONFIG = {
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
-    "rf_confidence": 70,        # sent to Roboflow, 0-100
-    "toy_car_confidence": 0.70, # checked in Python, 0-1
+    "rf_confidence": 90,        # sent to Roboflow, 0-100
+    "toy_car_confidence": 0.90, # checked in Python, 0-1
     "threshold":          "1.25",
 }
 
@@ -359,7 +359,7 @@ def upload_and_infer():
     print(f"[REQUEST] {t_start.strftime('%H:%M:%S')}  loc={loc}  spd={spd} km/h  size={len(img_bytes)}B")
 
     # ── FAST: Roboflow inference ──────────────────────────────
-    RF_CONFIDENCE = CONFIG.get("rf_confidence", 70)  # 70 = 70%
+    RF_CONFIDENCE = CONFIG.get("rf_confidence", 90)  # 90 = 90%
 
     rf_url = (
         f"https://serverless.roboflow.com/{CONFIG['model_id']}"
@@ -388,7 +388,7 @@ def upload_and_infer():
         print(f"[ROBOFLOW] {len(predictions)} prediction(s)  "
               f"took {(datetime.now()-t_start).total_seconds():.2f}s")
 
-        MIN_TOY_CAR_CONF = CONFIG.get("toy_car_confidence", 0.70)  # 0.70 = 70%
+        MIN_TOY_CAR_CONF = CONFIG.get("toy_car_confidence", 0.90)  # 0.90 = 90%
 
         for p in predictions:
             label = p.get('class')
