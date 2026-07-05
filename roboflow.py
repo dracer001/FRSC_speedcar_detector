@@ -39,27 +39,25 @@ app = Flask(__name__)
 CONFIG = {
     "agency_name":        "Federal Road Safety Corps (FRSC)",
     "system_id":          "SPEED-VIGIL-001",
-    "destination_email":  "jeremiah.m2200098@st.futminna.edu.ng",
+    "destination_email":  "david.m1901456@st.futminna.edu.ng",
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
-    "rf_confidence": 90,        # sent to Roboflow, 0-100
-    "toy_car_confidence": 0.90, # checked in Python, 0-1
-    "threshold":          "1.25",
+    "threshold":          "2.25",
 }
 
 # ─── EMAIL (see core/alerter.py) ──────────────────────────────
-# Uses Brevo's HTTP API (works on Render's free tier — see the note at the
-# top of core/alerter.py) whenever BREVO_API_KEY is set as an env var.
-# Falls back to direct SMTP on the "ids" mailbox otherwise, which is fine
-# for local development but will time out on Render's free tier.
+# Priority: Laravel relay -> Brevo HTTP API -> raw SMTP, each used only
+# if the ones before it aren't configured via env vars.
 alerter = EmailAlerter(
     sender     = os.environ.get("SMTP_SENDER",   "ids@yunivolt.com"),
     password   = os.environ.get("SMTP_PASSWORD", "Intrusion123!"),
     smtp_host  = os.environ.get("SMTP_HOST",     "mail.yunivolt.com"),
     smtp_port  = int(os.environ.get("SMTP_PORT", 465)),
-    api_key    = os.environ.get("BREVO_API_KEY"),          # set this on Render
-    api_sender = os.environ.get("BREVO_SENDER"),           # optional override
+    api_key    = os.environ.get("BREVO_API_KEY"),           # set this on Render
+    api_sender = os.environ.get("BREVO_SENDER"),            # optional override
+    relay_url  = os.environ.get("LARAVEL_RELAY_URL", "https://yunivolt-official-site-main-x5ahdz.free.laravel.cloud/send-alert-email"),       # e.g. https://.../send-alert-email
+    relay_key  = os.environ.get("LARAVEL_RELAY_KEY", "some-long-random-string-you-make-up"),       # must match ALERT_RELAY_KEY in Laravel's .env
 )
 
 # ─── CLOUDINARY CONFIG ───────────────────────────────────────
@@ -359,16 +357,8 @@ def upload_and_infer():
     print(f"[REQUEST] {t_start.strftime('%H:%M:%S')}  loc={loc}  spd={spd} km/h  size={len(img_bytes)}B")
 
     # ── FAST: Roboflow inference ──────────────────────────────
-    RF_CONFIDENCE = CONFIG.get("rf_confidence", 90)  # 90 = 90%
-
-    rf_url = (
-        f"https://serverless.roboflow.com/{CONFIG['model_id']}"
-        f"/{CONFIG['version']}"
-        f"?api_key={CONFIG['api_key']}"
-        f"&confidence={RF_CONFIDENCE}"
-        f"&overlap=30"
-    )
-
+    rf_url  = (f"https://serverless.roboflow.com/{CONFIG['model_id']}"
+               f"/{CONFIG['version']}?api_key={CONFIG['api_key']}")
     b64_img = base64.b64encode(img_bytes).decode('utf-8')
 
     rf_data      = {}
@@ -388,19 +378,13 @@ def upload_and_infer():
         print(f"[ROBOFLOW] {len(predictions)} prediction(s)  "
               f"took {(datetime.now()-t_start).total_seconds():.2f}s")
 
-        MIN_TOY_CAR_CONF = CONFIG.get("toy_car_confidence", 0.90)  # 0.90 = 90%
-
         for p in predictions:
-            label = p.get('class')
-            raw_conf = float(p.get('confidence', 0))  # Roboflow returns 0-1 here
-            conf = round(raw_conf * 100, 2)
-
+            label = p['class']
+            conf  = round(p['confidence'] * 100, 2)
             print(f"  → {label.upper()} @ {conf}%")
-
-            if label == 'toy_car' and raw_conf >= MIN_TOY_CAR_CONF:
+            if label == 'toy_car':
                 car_detected = True
                 is_violation = True
-
 
     except Exception as e:
         print(f"[ROBOFLOW] Error: {e}")
@@ -438,11 +422,9 @@ def upload_and_infer():
     return jsonify({
         "car_detected": car_detected,
         "is_violation": is_violation,
-        "confidence_threshold": MIN_TOY_CAR_CONF,
         "predictions": predictions,
         "roboflow_raw": rf_data
     })
-
 
 
 # ─── RUN ─────────────────────────────────────────────────────

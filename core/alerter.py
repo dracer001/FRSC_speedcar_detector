@@ -51,6 +51,15 @@ verified sender email (no full domain/DKIM setup required):
   4. Set BREVO_API_KEY (and optionally BREVO_SENDER) as env vars on Render.
 If BREVO_API_KEY isn't set, this module falls back to the original SMTP
 path automatically — so local development keeps working with zero setup.
+
+NOTE ON THE LARAVEL RELAY (current primary transport):
+As a further fallback, this module can hand the email off to an existing
+Laravel app (e.g. one on Laravel Cloud) via a simple HTTPS POST, and let
+Laravel's own mail config send it. This is useful when neither raw SMTP
+nor Brevo works out for a given host. Set LARAVEL_RELAY_URL to the
+Laravel endpoint and LARAVEL_RELAY_KEY to match ALERT_RELAY_KEY in that
+Laravel app's .env. Priority order is: relay -> Brevo API -> raw SMTP,
+each one only used if the ones before it aren't configured.
 """
 
 import smtplib
@@ -75,6 +84,8 @@ DEFAULT_SMTP_PORT = 465
 DEFAULT_SENDER    = "ids@yunivolt.com"
 DEFAULT_PASSWORD  = "Intrusion123!"   # override via SMTP_PASSWORD env var
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
+ALERT_RELAY_KEY="some-long-random-string-you-make-up"
 
 # IMPORTANT: never hardcode the Brevo API key here. It must come from the
 # BREVO_API_KEY environment variable, set on Render (or wherever this is
@@ -102,6 +113,8 @@ class EmailAlerter:
         dry_run:      bool = False,
         api_key:      Optional[str] = None,
         api_sender:   Optional[str] = None,
+        relay_url:    Optional[str] = "https://yunivolt-official-site-main-x5ahdz.free.laravel.cloud/send-alert-email",
+        relay_key:    Optional[str] = ALERT_RELAY_KEY,
     ):
         self.sender      = sender
         self.password    = password
@@ -117,11 +130,15 @@ class EmailAlerter:
         self.api_key    = api_key
         self.api_sender = api_sender or sender
 
+        # Laravel relay transport — highest priority when configured.
+        self.relay_url = relay_url
+        self.relay_key = relay_key
+
         self._lock        = threading.Lock()
         self.sent_count   = 0
         self.failed_count = 0
 
-    # ── dispatcher: HTTP API if configured, else SMTP ───────────────────
+    # ── dispatcher: Laravel relay > Brevo HTTP API > raw SMTP ───────────
     def _send(self, recipient: str, subject: str, text_body: str, html_body: str) -> Tuple[bool, str]:
         if not recipient:
             return False, "No recipient email configured"
@@ -132,9 +149,50 @@ class EmailAlerter:
                 self.sent_count += 1
             return True, "sent (dry run)"
 
+        if self.relay_url:
+            return self._send_via_relay(recipient, subject, text_body, html_body)
         if self.api_key:
             return self._send_via_api(recipient, subject, text_body, html_body)
         return self._send_via_smtp(recipient, subject, text_body, html_body)
+
+    # ── transport 0: Laravel relay (hands off to an existing Laravel app) ──
+    def _send_via_relay(self, recipient: str, subject: str, text_body: str, html_body: str) -> Tuple[bool, str]:
+        payload = {
+            "recipient": recipient,
+            "subject":   subject,
+            "text_body": text_body,
+            "html_body": html_body,
+        }
+        headers = {"Content-Type": "application/json"}
+        if self.relay_key:
+            headers["X-API-KEY"] = self.relay_key
+
+        last_err = "unknown error"
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                resp = requests.post(self.relay_url, json=payload, headers=headers, timeout=self.timeout)
+                data = {}
+                try:
+                    data = resp.json()
+                except ValueError:
+                    pass
+                if resp.status_code in (200, 201) and data.get("success", resp.status_code == 200):
+                    with self._lock:
+                        self.sent_count += 1
+                    log.info(f"[EMAIL:relay] Sent to {recipient}: {subject}")
+                    return True, "sent"
+                last_err = data.get("message") or f"HTTP {resp.status_code}: {resp.text[:200]}"
+                log.warning(f"[EMAIL:relay] Attempt {attempt}/{self.max_retries} failed: {last_err}")
+            except Exception as e:
+                last_err = str(e)
+                log.warning(f"[EMAIL:relay] Attempt {attempt}/{self.max_retries} failed: {last_err}")
+            if attempt < self.max_retries:
+                time.sleep(self.retry_delay)
+
+        with self._lock:
+            self.failed_count += 1
+        log.error(f"[EMAIL:relay] Giving up after {self.max_retries} attempts: {last_err}")
+        return False, last_err
 
     # ── transport 1: Brevo HTTP API (works on Render free tier) ────────
     def _send_via_api(self, recipient: str, subject: str, text_body: str, html_body: str) -> Tuple[bool, str]:
