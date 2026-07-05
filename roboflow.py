@@ -39,7 +39,7 @@ app = Flask(__name__)
 CONFIG = {
     "agency_name":        "Federal Road Safety Corps (FRSC)",
     "system_id":          "SPEED-VIGIL-001",
-    "destination_email":  "david.m1901456@st.futminna.edu.ng",
+    "destination_email":  "jeremiah.m2200098@st.futminna.edu.ng",
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
