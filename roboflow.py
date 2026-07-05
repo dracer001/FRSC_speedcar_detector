@@ -43,7 +43,7 @@ CONFIG = {
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
-    "threshold":          "2.25",
+    "threshold":          "2",
 }
 
 # ─── EMAIL (see core/alerter.py) ──────────────────────────────
@@ -344,6 +344,11 @@ def upload_and_infer():
     spd       = request.form.get('speed')       or '0'
     travel_t  = request.form.get('travel_time') or None
     frame_idx = request.form.get('frame_index') or None
+    # The DEV board now sends its own SPEED_LIMIT constant with every capture
+    # (see esp32dev_board.ino) so the reported threshold always matches what
+    # the hardware actually enforced. CONFIG["threshold"] is only a fallback
+    # for older firmware that doesn't send this field yet.
+    threshold = request.form.get('threshold') or CONFIG["threshold"]
 
     if not file:
         return jsonify({"error": "No image file provided"}), 400
@@ -395,7 +400,7 @@ def upload_and_infer():
         "timestamp":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "location":     loc,
         "speed":        spd,
-        "threshold":    CONFIG["threshold"],
+        "threshold":    threshold,
         "travel_time":  travel_t,
         "frame_index":  frame_idx,
         "image_url":    "",          # patched by background thread
