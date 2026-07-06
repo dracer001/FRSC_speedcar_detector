@@ -43,6 +43,8 @@ CONFIG = {
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
+    "rf_confidence": 90,        # sent to Roboflow, 0-100
+    "toy_car_confidence": 0.90, # checked in Python, 0-1
     "threshold":          "2",
 }
 
@@ -362,8 +364,16 @@ def upload_and_infer():
     print(f"[REQUEST] {t_start.strftime('%H:%M:%S')}  loc={loc}  spd={spd} km/h  size={len(img_bytes)}B")
 
     # ── FAST: Roboflow inference ──────────────────────────────
-    rf_url  = (f"https://serverless.roboflow.com/{CONFIG['model_id']}"
-               f"/{CONFIG['version']}?api_key={CONFIG['api_key']}")
+    RF_CONFIDENCE = CONFIG.get("rf_confidence", 90)  # 90 = 90%
+
+    rf_url = (
+        f"https://serverless.roboflow.com/{CONFIG['model_id']}"
+        f"/{CONFIG['version']}"
+        f"?api_key={CONFIG['api_key']}"
+        f"&confidence={RF_CONFIDENCE}"
+        f"&overlap=30"
+    )
+
     b64_img = base64.b64encode(img_bytes).decode('utf-8')
 
     rf_data      = {}
@@ -383,13 +393,19 @@ def upload_and_infer():
         print(f"[ROBOFLOW] {len(predictions)} prediction(s)  "
               f"took {(datetime.now()-t_start).total_seconds():.2f}s")
 
+        MIN_TOY_CAR_CONF = CONFIG.get("toy_car_confidence", 0.90)  # 0.90 = 90%
+
         for p in predictions:
-            label = p['class']
-            conf  = round(p['confidence'] * 100, 2)
+            label = p.get('class')
+            raw_conf = float(p.get('confidence', 0))  # Roboflow returns 0-1 here
+            conf = round(raw_conf * 100, 2)
+
             print(f"  → {label.upper()} @ {conf}%")
-            if label == 'toy_car':
+
+            if label == 'toy_car' and raw_conf >= MIN_TOY_CAR_CONF:
                 car_detected = True
                 is_violation = True
+
 
     except Exception as e:
         print(f"[ROBOFLOW] Error: {e}")
@@ -427,9 +443,11 @@ def upload_and_infer():
     return jsonify({
         "car_detected": car_detected,
         "is_violation": is_violation,
+        "confidence_threshold": MIN_TOY_CAR_CONF,
         "predictions": predictions,
         "roboflow_raw": rf_data
     })
+
 
 
 # ─── RUN ─────────────────────────────────────────────────────
