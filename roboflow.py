@@ -43,8 +43,8 @@ CONFIG = {
     "model_id":           "toy-car-detection-uqfuq",
     "version":            "5",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
-    "rf_confidence": 65,        # sent to Roboflow, 0-100
-    "toy_car_confidence": 0.65, # checked in Python, 0-1
+    "rf_confidence": 70,        # sent to Roboflow, 0-100
+    "toy_car_confidence": 0.70, # checked in Python, 0-1
     "threshold":          "2",
 }
 
