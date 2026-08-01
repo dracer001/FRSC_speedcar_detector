@@ -307,16 +307,16 @@ def health():
 SELF_URL = os.environ.get("SELF_URL", "https://frsc-speedcar-detector.onrender.com")
 KEEPALIVE_INTERVAL_SEC = 600  # 10 minutes — safely under the 15-min sleep window
 
-def keep_alive_loop():
-    while True:
-        time.sleep(KEEPALIVE_INTERVAL_SEC)
-        try:
-            r = requests.get(f"{SELF_URL}/health", timeout=10)
-            print(f"[KEEPALIVE] Self-ping -> {r.status_code}")
-        except Exception as e:
-            print(f"[KEEPALIVE] Self-ping failed: {e}")
+# def keep_alive_loop():
+#     while True:
+#         time.sleep(KEEPALIVE_INTERVAL_SEC)
+#         try:
+#             r = requests.get(f"{SELF_URL}/health", timeout=10)
+#             print(f"[KEEPALIVE] Self-ping -> {r.status_code}")
+#         except Exception as e:
+#             print(f"[KEEPALIVE] Self-ping failed: {e}")
 
-threading.Thread(target=keep_alive_loop, daemon=True).start()
+# threading.Thread(target=keep_alive_loop, daemon=True).start()
 
 
 
