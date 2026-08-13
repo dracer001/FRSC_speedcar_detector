@@ -58,6 +58,7 @@ CONFIG = {
     # is carried over from the old model and has NOT been confirmed
     # against the retrained model's classes yet.
     "target_class":       "toy_car",
+    
 
     "toy_car_confidence": 0.70,  # checked in Python, 0-1
     "threshold":          "2",
