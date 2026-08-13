@@ -1,0 +1,480 @@
+[
+  {
+    "timestamp": "2026-08-13 21:26:57",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786652818/frsc_speedvigil/LOG_20260813_212655_090229.jpg",
+    "public_id": "LOG_20260813_212655_090229",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [
+      {
+        "width": 205.0,
+        "height": 120.0,
+        "x": 470.5,
+        "y": 540.0,
+        "confidence": 0.9939849972724915,
+        "class_id": 3,
+        "class": "leaf",
+        "detection_id": "fe0a4819-0001-4088-b2d5-ed8d9cfd4e7f",
+        "parent_id": "image"
+      },
+      {
+        "width": 226.0,
+        "height": 79.0,
+        "x": 236.0,
+        "y": 504.5,
+        "confidence": 0.9794275760650635,
+        "class_id": 3,
+        "class": "leaf",
+        "detection_id": "332e0207-d6c4-4f79-a298-256dc1768eb1",
+        "parent_id": "image"
+      },
+      {
+        "width": 232.0,
+        "height": 220.0,
+        "x": 117.0,
+        "y": 336.0,
+        "confidence": 0.9642226696014404,
+        "class_id": 1,
+        "class": "box",
+        "detection_id": "ed43814f-0812-4e96-a55e-afcab192c205",
+        "parent_id": "image"
+      },
+      {
+        "width": 295.0,
+        "height": 323.0,
+        "x": 388.5,
+        "y": 273.5,
+        "confidence": 0.9626095294952393,
+        "class_id": 2,
+        "class": "hand",
+        "detection_id": "001ef42b-678e-4d0d-986f-69929eea9c6b",
+        "parent_id": "image"
+      }
+    ],
+    "roboflow_raw": {
+      "outputs": [
+        {
+          "predictions": {
+            "image": {
+              "width": 800,
+              "height": 600
+            },
+            "predictions": [
+              {
+                "width": 205.0,
+                "height": 120.0,
+                "x": 470.5,
+                "y": 540.0,
+                "confidence": 0.9939849972724915,
+                "class_id": 3,
+                "class": "leaf",
+                "detection_id": "fe0a4819-0001-4088-b2d5-ed8d9cfd4e7f",
+                "parent_id": "image"
+              },
+              {
+                "width": 226.0,
+                "height": 79.0,
+                "x": 236.0,
+                "y": 504.5,
+                "confidence": 0.9794275760650635,
+                "class_id": 3,
+                "class": "leaf",
+                "detection_id": "332e0207-d6c4-4f79-a298-256dc1768eb1",
+                "parent_id": "image"
+              },
+              {
+                "width": 232.0,
+                "height": 220.0,
+                "x": 117.0,
+                "y": 336.0,
+                "confidence": 0.9642226696014404,
+                "class_id": 1,
+                "class": "box",
+                "detection_id": "ed43814f-0812-4e96-a55e-afcab192c205",
+                "parent_id": "image"
+              },
+              {
+                "width": 295.0,
+                "height": 323.0,
+                "x": 388.5,
+                "y": 273.5,
+                "confidence": 0.9626095294952393,
+                "class_id": 2,
+                "class": "hand",
+                "detection_id": "001ef42b-678e-4d0d-986f-69929eea9c6b",
+                "parent_id": "image"
+              }
+            ]
+          }
+        }
+      ],
+      "profiler_trace": []
+    }
+  },
+  {
+    "timestamp": "2026-08-13 21:13:44",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786652025/frsc_speedvigil/LOG_20260813_211342_155572.jpg",
+    "public_id": "LOG_20260813_211342_155572",
+    "is_violation": true,
+    "car_detected": true,
+    "predictions": [
+      {
+        "width": 197.0,
+        "height": 157.0,
+        "x": 122.5,
+        "y": 355.5,
+        "confidence": 0.9678722620010376,
+        "class_id": 1,
+        "class": "box",
+        "detection_id": "8028a84a-2549-40d0-aecd-8c830cf921f4",
+        "parent_id": "image"
+      },
+      {
+        "width": 86.0,
+        "height": 71.0,
+        "x": 367.0,
+        "y": 300.5,
+        "confidence": 0.9457360506057739,
+        "class_id": 7,
+        "class": "toy_car",
+        "detection_id": "fb49a071-3cfb-44a8-8d2e-23b8b6f1a238",
+        "parent_id": "image"
+      }
+    ],
+    "roboflow_raw": {
+      "outputs": [
+        {
+          "predictions": {
+            "image": {
+              "width": 800,
+              "height": 600
+            },
+            "predictions": [
+              {
+                "width": 197.0,
+                "height": 157.0,
+                "x": 122.5,
+                "y": 355.5,
+                "confidence": 0.9678722620010376,
+                "class_id": 1,
+                "class": "box",
+                "detection_id": "8028a84a-2549-40d0-aecd-8c830cf921f4",
+                "parent_id": "image"
+              },
+              {
+                "width": 86.0,
+                "height": 71.0,
+                "x": 367.0,
+                "y": 300.5,
+                "confidence": 0.9457360506057739,
+                "class_id": 7,
+                "class": "toy_car",
+                "detection_id": "fb49a071-3cfb-44a8-8d2e-23b8b6f1a238",
+                "parent_id": "image"
+              }
+            ]
+          }
+        }
+      ],
+      "profiler_trace": []
+    }
+  },
+  {
+    "timestamp": "2026-08-13 21:08:43",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786651724/frsc_speedvigil/LOG_20260813_210842_670924.jpg",
+    "public_id": "LOG_20260813_210842_670924",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "outputs": [
+        {
+          "predictions": {
+            "image": {
+              "width": 800,
+              "height": 600
+            },
+            "predictions": [
+              {
+                "width": 219.0,
+                "height": 149.0,
+                "x": 397.5,
+                "y": 268.5,
+                "confidence": 0.9507298469543457,
+                "class_id": 2,
+                "class": "hand",
+                "detection_id": "40dcda29-f673-4128-ab5d-3589d73cee41",
+                "parent_id": "image"
+              },
+              {
+                "width": 162.0,
+                "height": 154.0,
+                "x": 111.0,
+                "y": 366.0,
+                "confidence": 0.9493681192398071,
+                "class_id": 1,
+                "class": "box",
+                "detection_id": "67ce2c15-92e7-486e-8da5-c02501df2a3a",
+                "parent_id": "image"
+              }
+            ]
+          }
+        }
+      ],
+      "profiler_trace": []
+    }
+  },
+  {
+    "timestamp": "2026-08-13 21:07:57",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786651678/frsc_speedvigil/LOG_20260813_210754_149854.jpg",
+    "public_id": "LOG_20260813_210754_149854",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "outputs": [
+        {
+          "predictions": {
+            "image": {
+              "width": 800,
+              "height": 600
+            },
+            "predictions": [
+              {
+                "width": 219.0,
+                "height": 149.0,
+                "x": 397.5,
+                "y": 268.5,
+                "confidence": 0.9507298469543457,
+                "class_id": 2,
+                "class": "hand",
+                "detection_id": "5b161410-4d89-4b40-84e4-8a94b55e6b1f",
+                "parent_id": "image"
+              },
+              {
+                "width": 162.0,
+                "height": 154.0,
+                "x": 111.0,
+                "y": 366.0,
+                "confidence": 0.9493681192398071,
+                "class_id": 1,
+                "class": "box",
+                "detection_id": "01301c0f-8f2c-4296-9618-a46d2a8c0366",
+                "parent_id": "image"
+              }
+            ]
+          }
+        }
+      ],
+      "profiler_trace": []
+    }
+  },
+  {
+    "timestamp": "2026-08-13 21:01:30",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786651291/frsc_speedvigil/LOG_20260813_210128_405291.jpg",
+    "public_id": "LOG_20260813_210128_405291",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "message": "Requested Roboflow resource not found. Make sure that workspace, project or model you referred in request exists."
+    }
+  },
+  {
+    "timestamp": "2026-08-13 21:01:07",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786651268/frsc_speedvigil/LOG_20260813_210104_804727.jpg",
+    "public_id": "LOG_20260813_210104_804727",
+    "is_violation": true,
+    "car_detected": true,
+    "predictions": [
+      {
+        "x": 327.0,
+        "y": 467.0,
+        "width": 84.0,
+        "height": 64.0,
+        "confidence": 0.739262580871582,
+        "class": "toy_car",
+        "class_id": 0,
+        "detection_id": "7f1216e5-2faf-4e89-9ab3-edf9b0620760"
+      }
+    ],
+    "roboflow_raw": {
+      "inference_id": "7f17666c-9787-40e7-855f-89f488b00d0a",
+      "time": 0.024994315579533577,
+      "image": {
+        "width": 800,
+        "height": 600
+      },
+      "predictions": [
+        {
+          "x": 327.0,
+          "y": 467.0,
+          "width": 84.0,
+          "height": 64.0,
+          "confidence": 0.739262580871582,
+          "class": "toy_car",
+          "class_id": 0,
+          "detection_id": "7f1216e5-2faf-4e89-9ab3-edf9b0620760"
+        }
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:54:03",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786650844/frsc_speedvigil/LOG_20260813_205401_316794.jpg",
+    "public_id": "LOG_20260813_205401_316794",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "message": "Requested Roboflow resource not found. Make sure that workspace, project or model you referred in request exists."
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:46:56",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786650417/frsc_speedvigil/LOG_20260813_204654_648244.jpg",
+    "public_id": "LOG_20260813_204654_648244",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "message": "Requested Roboflow resource not found. Make sure that workspace, project or model you referred in request exists."
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:46:18",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786650379/frsc_speedvigil/LOG_20260813_204616_455499.jpg",
+    "public_id": "LOG_20260813_204616_455499",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "message": "Requested Roboflow resource not found. Make sure that workspace, project or model you referred in request exists."
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:35:10",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786649711/frsc_speedvigil/LOG_20260813_203508_879038.jpg",
+    "public_id": "LOG_20260813_203508_879038",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "detail": "Method Not Allowed"
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:34:50",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786649691/frsc_speedvigil/LOG_20260813_203448_005872.jpg",
+    "public_id": "LOG_20260813_203448_005872",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "detail": "Method Not Allowed"
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:16:57",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786648618/frsc_speedvigil/LOG_20260813_201655_549936.jpg",
+    "public_id": "LOG_20260813_201655_549936",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "detail": "Method Not Allowed"
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:15:29",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786648530/frsc_speedvigil/LOG_20260813_201526_971140.jpg",
+    "public_id": "LOG_20260813_201526_971140",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "message": "Requested Roboflow resource not found. Make sure that workspace, project or model you referred in request exists."
+    }
+  },
+  {
+    "timestamp": "2026-08-13 20:13:53",
+    "location": "FUT Minna",
+    "speed": "0",
+    "threshold": "2",
+    "travel_time": null,
+    "frame_index": null,
+    "image_url": "https://res.cloudinary.com/dc5hm0npx/image/upload/v1786648434/frsc_speedvigil/LOG_20260813_201351_073930.jpg",
+    "public_id": "LOG_20260813_201351_073930",
+    "is_violation": false,
+    "car_detected": false,
+    "predictions": [],
+    "roboflow_raw": {
+      "detail": "Method Not Allowed"
+    }
+  }
+]

@@ -11,10 +11,6 @@ Restructured for maintainability:
   • New: /test_email route + a "Send Test Email" button on the dashboard.
   • New: /history/download_image and /history/download_zip so evidence
     images in the history view can be downloaded individually or in bulk.
-  • Switched detection from the classic single-model endpoint to a
-    Roboflow Workflow ("toy-car-detection-uqfuq — Base Workflow"), since
-    the retrained model (v6, yolo11n) is only deployed as a workflow —
-    see the parsing note above the predictions loop in upload_and_infer().
 
 Routes, behavior, and response shapes for the ESP32-facing endpoints
 (/upload_and_infer, /health) are unchanged.
@@ -44,22 +40,12 @@ CONFIG = {
     "agency_name":        "Federal Road Safety Corps (FRSC)",
     "system_id":          "SPEED-VIGIL-001",
     "destination_email":  "jeremiah.m2200098@st.futminna.edu.ng",
-
-    # Roboflow Workflow (not the classic single-model endpoint — this
-    # retrained version is only deployed as a workflow, confirmed via
-    # the Deploy tab on app.roboflow.com).
-    "workspace_name":     "dracers-workspace",
-    "workflow_id":        "toy-car-detection-vtoy-car-detection-uqfuq-6-yolo11n-t1-logic",
+    "model_id":           "toy-car-detection-uqfuq-6-yolo11n-t1",
+    "version":            "6",
     "api_key":            "HrN6gq24W5BypZTSwcgC",
-
-    # TODO-VERIFY: confirm this against the actual class list in the
-    # Roboflow project. A live test run only returned "hand" and "box"
-    # detections (no toy car in that test image), so this class name
-    # is carried over from the old model and has NOT been confirmed
-    # against the retrained model's classes yet.
-    "target_class":       "toy_car",
-
-    "toy_car_confidence": 0.70,  # checked in Python, 0-1
+    # "api_key2":          "BZXy2gjLlm07akixddzm",  # optional second key for failover
+    "rf_confidence": 70,        # sent to Roboflow, 0-100
+    "toy_car_confidence": 0.70, # checked in Python, 0-1
     "threshold":          "2",
 }
 
@@ -156,11 +142,7 @@ def index():
 @app.route('/history')
 def history_page():
     records = load_history()
-    return render_template(
-        "history.html",
-        records=records,
-        target_class=CONFIG["target_class"],
-    )
+    return render_template("history.html", records=records)
 
 
 # ─── HISTORY API ─────────────────────────────────────────────
@@ -291,7 +273,7 @@ def background_save(img_bytes, public_id, record, car_detected, predictions):
         ok, info = alerter.send_violation_report(
             recipient  = CONFIG["destination_email"],
             image_url  = image_url,
-            label      = CONFIG["target_class"],
+            label      = "toy_car",
             confidence = round(best_conf * 100, 2),
             location   = record["location"],
             speed      = record["speed"],
@@ -326,16 +308,16 @@ def health():
 SELF_URL = os.environ.get("SELF_URL", "https://frsc-speedcar-detector.onrender.com")
 KEEPALIVE_INTERVAL_SEC = 600  # 10 minutes — safely under the 15-min sleep window
 
-# def keep_alive_loop():
-#     while True:
-#         time.sleep(KEEPALIVE_INTERVAL_SEC)
-#         try:
-#             r = requests.get(f"{SELF_URL}/health", timeout=10)
-#             print(f"[KEEPALIVE] Self-ping -> {r.status_code}")
-#         except Exception as e:
-#             print(f"[KEEPALIVE] Self-ping failed: {e}")
+def keep_alive_loop():
+    while True:
+        time.sleep(KEEPALIVE_INTERVAL_SEC)
+        try:
+            r = requests.get(f"{SELF_URL}/health", timeout=10)
+            print(f"[KEEPALIVE] Self-ping -> {r.status_code}")
+        except Exception as e:
+            print(f"[KEEPALIVE] Self-ping failed: {e}")
 
-# threading.Thread(target=keep_alive_loop, daemon=True).start()
+threading.Thread(target=keep_alive_loop, daemon=True).start()
 
 
 
@@ -347,7 +329,7 @@ KEEPALIVE_INTERVAL_SEC = 600  # 10 minutes — safely under the 15-min sleep win
 #
 #  Fast path  (what the ESP32 waits for):
 #    1. Read image bytes from request            — local, instant
-#    2. Base64-encode + call Roboflow workflow   — ~200-600 ms
+#    2. Base64-encode + call Roboflow            — ~200-600 ms
 #    3. Return jsonify(rf_data) to ESP32         — done, ESP32 happy
 #
 #  Slow path  (background thread, ESP32 already gone):
@@ -382,60 +364,49 @@ def upload_and_infer():
     print(f"\n{'='*60}")
     print(f"[REQUEST] {t_start.strftime('%H:%M:%S')}  loc={loc}  spd={spd} km/h  size={len(img_bytes)}B")
 
-    # ── FAST: Roboflow workflow inference ─────────────────────
-    b64_img = base64.b64encode(img_bytes).decode('utf-8')
+    # ── FAST: Roboflow inference ──────────────────────────────
+    RF_CONFIDENCE = CONFIG.get("rf_confidence", 90)  # 90 = 90%
 
-    rf_url = f"https://serverless.roboflow.com/infer/workflows/{CONFIG['workspace_name']}/{CONFIG['workflow_id']}"
+    rf_url = (
+        f"https://serverless.roboflow.com/{CONFIG['model_id']}"
+        f"/{CONFIG['version']}"
+        f"?api_key={CONFIG['api_key']}"
+        f"&confidence={RF_CONFIDENCE}"
+        f"&overlap=30"
+    )
+
+    b64_img = base64.b64encode(img_bytes).decode('utf-8')
 
     rf_data      = {}
     predictions  = []
     car_detected = False
     is_violation = False
 
-    MIN_TOY_CAR_CONF = CONFIG.get("toy_car_confidence", 0.70)  # 0.70 = 70%
-    TARGET_CLASS     = CONFIG.get("target_class", "toy_car")
-
     try:
-        resp = requests.post(
-            rf_url,
-            json={
-                "api_key": CONFIG["api_key"],
-                "inputs": {
-                    "image": {"type": "base64", "value": b64_img}
-                }
-            },
-            headers={"Content-Type": "application/json"},
+        resp        = requests.post(
+            rf_url, data=b64_img,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=12
         )
-        resp.raise_for_status()
-        rf_data = resp.json()
-
-        # Workflow response shape (confirmed from a live run against this
-        # workflow — NOT the classic {"predictions": [...]} shape used by
-        # the old single-model endpoint):
-        #   {
-        #     "outputs": [
-        #       { "predictions": { "image": {...}, "predictions": [ {class, confidence, ...}, ... ] } }
-        #     ],
-        #     "profiler_trace": [...]
-        #   }
-        # outputs is one entry per input image — we only ever send one.
-        outputs     = rf_data.get("outputs", [])
-        predictions = outputs[0].get("predictions", {}).get("predictions", []) if outputs else []
+        rf_data     = resp.json()
+        predictions = rf_data.get('predictions', [])
 
         print(f"[ROBOFLOW] {len(predictions)} prediction(s)  "
               f"took {(datetime.now()-t_start).total_seconds():.2f}s")
 
+        MIN_TOY_CAR_CONF = CONFIG.get("toy_car_confidence", 0.90)  # 0.90 = 90%
+
         for p in predictions:
-            label    = p.get('class')
-            raw_conf = float(p.get('confidence', 0))  # workflow returns 0-1 here too
-            conf     = round(raw_conf * 100, 2)
+            label = p.get('class')
+            raw_conf = float(p.get('confidence', 0))  # Roboflow returns 0-1 here
+            conf = round(raw_conf * 100, 2)
 
-            print(f"  → {str(label).upper()} @ {conf}%")
+            print(f"  → {label.upper()} @ {conf}%")
 
-            if label == TARGET_CLASS and raw_conf >= MIN_TOY_CAR_CONF:
+            if label == 'toy_car' and raw_conf >= MIN_TOY_CAR_CONF:
                 car_detected = True
                 is_violation = True
+
 
     except Exception as e:
         print(f"[ROBOFLOW] Error: {e}")
@@ -469,6 +440,7 @@ def upload_and_infer():
     total_ms = (datetime.now() - t_start).total_seconds() * 1000
     print(f"[RESPONSE] Returning to ESP32  total={total_ms:.0f}ms")
     print(f"{'='*60}\n")
+    # CHANGE THIS LINE to return the calculated flags to your ESP32-CAM
     return jsonify({
         "car_detected": car_detected,
         "is_violation": is_violation,

@@ -29,7 +29,6 @@
   .badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
   .badge-viol{background:#e74c3c22;color:var(--red);border:1px solid var(--red)}
   .badge-ok{background:#27ae6022;color:var(--green);border:1px solid var(--green)}
-  .badge-none{background:#f39c1222;color:var(--accent);border:1px solid var(--accent)}
   .ts{font-size:11px;color:var(--muted)}
   .row{display:flex;justify-content:space-between;margin-bottom:6px}
   .row-label{font-size:11px;color:var(--muted)}
@@ -67,28 +66,24 @@
   </div>
 
   {% set total = records|length %}
-  {% set violations = records|selectattr('is_violation','equalto',true)|list|length %}
-  {% set confirmed  = records|selectattr('car_detected','equalto',true)|list|length %}
+  {% set confirmed = records|selectattr('car_detected','equalto',true)|list|length %}
   <div class="stats">
     <div class="stat"><div class="stat-label">Total Events</div><div class="stat-value">{{ total }}</div></div>
-    <div class="stat"><div class="stat-label">Speed Violations</div><div class="stat-value red">{{ violations }}</div></div>
     <div class="stat"><div class="stat-label">Cars Confirmed</div><div class="stat-value red">{{ confirmed }}</div></div>
-    <div class="stat"><div class="stat-label">False Positives</div><div class="stat-value" style="color:var(--accent)">{{ violations - confirmed }}</div></div>
+    <div class="stat"><div class="stat-label">No Car</div><div class="stat-value" style="color:var(--accent)">{{ total - confirmed }}</div></div>
   </div>
 
   <div class="filter-row">
     <span style="font-size:12px;color:var(--muted)">Filter:</span>
     <button class="filter-btn active" onclick="filterCards('all',this)">All</button>
-    <button class="filter-btn" onclick="filterCards('violation',this)">Violations</button>
-    <button class="filter-btn" onclick="filterCards('confirmed',this)">Confirmed Cars</button>
-    <button class="filter-btn" onclick="filterCards('clear',this)">Speed OK</button>
+    <button class="filter-btn" onclick="filterCards('confirmed',this)">Car Confirmed</button>
+    <button class="filter-btn" onclick="filterCards('clear',this)">No Car</button>
   </div>
 
   {% if records %}
   <div class="grid" id="grid">
     {% for r in records %}
     <div class="card"
-         data-viol="{{ 'true' if r.is_violation else 'false' }}"
          data-confirmed="{{ 'true' if r.car_detected else 'false' }}"
          data-url="{{ r.image_url }}"
          data-name="{{ (r.public_id or ('FRSC_' ~ loop.index)) }}.jpg">
@@ -107,26 +102,26 @@
         <div class="card-header">
           {% if r.car_detected %}
             <span class="badge badge-viol">🚗 CAR CONFIRMED</span>
-          {% elif r.is_violation %}
-            <span class="badge badge-none">⚠ SPEED VIOLATION</span>
           {% else %}
-            <span class="badge badge-ok">✓ Speed OK</span>
+            <span class="badge badge-ok">NO CAR</span>
           {% endif %}
           <span class="ts">{{ r.timestamp }}</span>
         </div>
 
         <div style="margin-bottom:10px">
-          <div class="speed-big">{{ "%.2f"|format(r.speed|float) }}</div>
-          <div class="speed-unit">km/h &nbsp;·&nbsp; limit {{ r.threshold }} km/h</div>
+          {% if r.speed and r.speed|string != '0' %}
+            <div class="speed-big">{{ r.speed }} <span class="speed-unit">km/h</span></div>
+          {% else %}
+            <div class="speed-big">—</div>
+          {% endif %}
         </div>
 
         <div class="row"><span class="row-label">📍 Location</span><span class="row-val">{{ r.location }}</span></div>
-        <div class="row"><span class="row-label">⏱ Travel time</span><span class="row-val">{{ r.travel_time or '—' }}</span></div>
-        <div class="row"><span class="row-label">🖼 Frames sent</span><span class="row-val">{{ r.frame_index or '?' }}</span></div>
 
-        {% if r.predictions %}
+        {% set car_preds = r.predictions | selectattr('class', 'equalto', target_class) | list %}
+        {% if car_preds %}
         <div class="preds">
-          {% for p in r.predictions %}
+          {% for p in car_preds %}
           <div class="pred-item">
             {{ p.class }} &mdash; {{ "%.1f"|format(p.confidence * 100) }}% confidence
             <div class="conf-bar"><div class="conf-fill" style="width:{{ (p.confidence*100)|int }}%"></div></div>
@@ -149,12 +144,10 @@
     document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     document.querySelectorAll('.card').forEach(card => {
-      const v = card.dataset.viol === 'true';
       const c = card.dataset.confirmed === 'true';
       let show = true;
-      if(type==='violation') show = v;
-      else if(type==='confirmed') show = c;
-      else if(type==='clear') show = !v;
+      if(type==='confirmed') show = c;
+      else if(type==='clear') show = !c;
       card.style.display = show ? '' : 'none';
     });
   }
