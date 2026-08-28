@@ -113,7 +113,7 @@ class EmailAlerter:
         dry_run:      bool = False,
         api_key:      Optional[str] = None,
         api_sender:   Optional[str] = None,
-        relay_url:    Optional[str] = "https://yunivolt-official-site-main-x5ahdz.free.laravel.cloud/send-alert-email",
+        relay_url:    Optional[str] = "https://yunivolt.com/send-alert-email",
         relay_key:    Optional[str] = ALERT_RELAY_KEY,
     ):
         self.sender      = sender
