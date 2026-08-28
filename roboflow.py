@@ -74,7 +74,7 @@ alerter = EmailAlerter(
     smtp_port  = int(os.environ.get("SMTP_PORT", 465)),
     api_key    = os.environ.get("BREVO_API_KEY"),           # set this on Render
     api_sender = os.environ.get("BREVO_SENDER"),            # optional override
-    relay_url  = os.environ.get("LARAVEL_RELAY_URL", "https://yunivolt-official-site-main-x5ahdz.free.laravel.cloud/send-alert-email"),       # e.g. https://.../send-alert-email
+    relay_url  = os.environ.get("LARAVEL_RELAY_URL", "https://yunivolt.com/send-alert-email"),       # e.g. https://.../send-alert-email
     relay_key  = os.environ.get("LARAVEL_RELAY_KEY", "some-long-random-string-you-make-up"),       # must match ALERT_RELAY_KEY in Laravel's .env
 )
 
@@ -255,6 +255,7 @@ def download_zip():
 # ─── TEST EMAIL ───────────────────────────────────────────────
 @app.route('/test_email', methods=['POST'])
 def test_email():
+    print("lets test mail")
     recipient = CONFIG["destination_email"]
     ok, info = alerter.send_test(recipient)
     status_code = 200 if ok else 502
