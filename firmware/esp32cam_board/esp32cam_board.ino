@@ -12,11 +12,11 @@ const char* password = "@Jerry123";
 
 // ─── BACKEND TARGET CONFIGURATION ────────────────────────────
 const char* server_host = "frsc-speedcar-detector.onrender.com";
-const int   server_port = 443; 
+const int   server_port = 443;
 
 // ─── INTER-BOARD HIGH-SPEED SERIAL INTERFACE ─────────────────
-HardwareSerial DEVBoardSerial(1); // Maps onto secondary hardware register
-#define CAM_TX_PIN 12 
+HardwareSerial DEVBoardSerial(1);
+#define CAM_TX_PIN 12
 #define CAM_RX_PIN 13
 
 // ─── AI-THINKER ESP32-CAM LENS MATRIX INTERFACES ─────────────
@@ -45,7 +45,7 @@ String parseQueryKey(String data, String key);
 
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Terminate loop fault brownout triggers
-  
+
   Serial.begin(115200);      // Primary USB output for serial debugging
   DEVBoardSerial.begin(115200, SERIAL_8N1, CAM_RX_PIN, CAM_TX_PIN); // Controller link
 
@@ -70,7 +70,7 @@ void setup() {
   // Automated Render cloud environment initialization test execution
   Serial.println("[*] Querying remote Render cluster liveness status (/health)...");
   bool cloudActive = checkServerHealth();
-  
+
   if (cloudActive) {
     Serial.println("[+] Cloud server confirmed ACTIVE. Issuing initialization completion signal.");
     DEVBoardSerial.println("CAM_READY"); // Tell main board to unlock screen interface
@@ -94,7 +94,7 @@ void loop() {
       } else {
         DEVBoardSerial.println("PONG:0");
       }
-    } 
+    }
     else if (command.startsWith("CAPTURE:")) {
       processTelemetryCapture(command);
     }
@@ -116,7 +116,7 @@ bool checkServerHealth() {
 
   unsigned long timeout = millis();
   bool derivedSuccess = false;
-  
+
   while (client.connected() || client.available()) {
     if (millis() - timeout > 7000) break; // 7-Second load window limit for sleeping apps
     if (client.available()) {
@@ -148,6 +148,15 @@ void processTelemetryCapture(String commandLine) {
   Serial.println("[+] Resolving capture event frames...");
   DEVBoardSerial.println("CAM_CAPTURING");
 
+  // ── FIX: Flush any stale frame sitting in the driver queue before grabbing
+  // the frame that actually corresponds to THIS trigger. Belt-and-suspenders
+  // alongside fb_count=1 below — guarantees no old frame ever leaks through.
+  camera_fb_t * stale = esp_camera_fb_get();
+  if (stale) {
+    esp_camera_fb_return(stale);
+    Serial.println("[+] Flushed stale queued frame.");
+  }
+
   camera_fb_t * fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("[-] Lens configuration failed to yield buffer allocations.");
@@ -169,17 +178,17 @@ void processTelemetryCapture(String commandLine) {
   }
 
   String boundary = "----FRSCVigilProductionFormBoundary";
-  
+
   // Format string components exactly matching Python script Flask multi-part variable parsing loops
   String p_loc    = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"location\"\r\n\r\n" + locVal + "\r\n";
   String p_speed  = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"speed\"\r\n\r\n" + speedVal + "\r\n";
   String p_time   = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"travel_time\"\r\n\r\n" + timeVal + "\r\n";
   String p_frame  = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"frame_index\"\r\n\r\n" + frameVal + "\r\n";
-  
+
   String file_header = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"imageFile\"; filename=\"capture.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
   String file_footer = "\r\n--" + boundary + "--\r\n";
 
-  long total_len = p_loc.length() + p_speed.length() + p_time.length() + p_frame.length() + 
+  long total_len = p_loc.length() + p_speed.length() + p_time.length() + p_frame.length() +
                    file_header.length() + fb->len + file_footer.length();
 
   Serial.println("[+] Injecting form structure over network socket...");
@@ -194,7 +203,7 @@ void processTelemetryCapture(String commandLine) {
   client.print(p_time);
   client.print(p_frame);
   client.print(file_header);
-  
+
   // High-performance direct block indexing copy loop (Safe from system memory leak bugs)
   uint8_t *fbBuf = fb->buf;
   size_t fbLen = fb->len;
@@ -203,7 +212,7 @@ void processTelemetryCapture(String commandLine) {
     size_t chunkSize = remaining < 1024 ? remaining : 1024;
     client.write(fbBuf + n, chunkSize);
   }
-  
+
   client.print(file_footer);
   esp_camera_fb_return(fb); // Instantly deallocate memory safely back to the camera driver pool
 
@@ -219,7 +228,7 @@ void processTelemetryCapture(String commandLine) {
       String line = client.readStringUntil('\n');
       line.trim();
       line.toLowerCase();
-      
+
       // Highly robust substring checks (ignores variations in spaces, quotes, or colons)
       if (line.indexOf("car_detected") != -1) {
         processedResult = true;
@@ -281,11 +290,11 @@ bool initCameraHardware() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 10000000; // Safeguard current drop constraints
   config.pixel_format = PIXFORMAT_JPEG;
-  
+
   if(psramFound()){
     config.frame_size = FRAMESIZE_SVGA;
     config.jpeg_quality = 12;
-    config.fb_count = 2;
+    config.fb_count = 1;
   } else {
     config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 12;
